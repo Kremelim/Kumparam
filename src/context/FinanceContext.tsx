@@ -82,6 +82,11 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         if (billsRes.data) setBills(billsRes.data);
         if (invRes.data) setInvestments(invRes.data);
         if (budgetsRes.data) setStoredBudgets(budgetsRes.data);
+
+        if (txRes.error) console.error("Transactions fetch error:", txRes.error);
+        if (billsRes.error) console.error("Bills fetch error:", billsRes.error);
+        if (invRes.error) console.error("Investments fetch error:", invRes.error);
+        if (budgetsRes.error) console.error("Budgets fetch error:", budgetsRes.error);
       } catch (err) {
         console.error("Supabase veri yükleme hatası:", err);
       } finally {
@@ -187,19 +192,32 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (!error && data) {
         setTransactions(prev => prev.map(tx => tx.id === tempId ? data : tx));
       } else {
-        console.error("Yükleme hatası:", error);
+        console.error("Transaction ekleme hatası:", error);
+        alert(`Veritabanına kaydedilemedi (Transactions): ${error?.message || 'Bilinmeyen hata'}`);
       }
     }
   };
 
   const updateTransaction = async (id: string, updatedTx: Omit<Transaction, 'id'>) => {
     setTransactions(prev => prev.map(t => t.id === id ? { ...updatedTx, id } : t));
-    if (user) await supabase.from('transactions').update(updatedTx).eq('id', id).eq('user_id', user.id);
+    if (user) {
+      const { error } = await supabase.from('transactions').update(updatedTx).eq('id', id).eq('user_id', user.id);
+      if (error) {
+        console.error("Transaction güncelleme hatası:", error);
+        alert(`Güncelleme kaydedilemedi: ${error.message}`);
+      }
+    }
   };
 
   const deleteTransaction = async (id: string) => {
     setTransactions(prev => prev.filter(t => t.id !== id));
-    if (user) await supabase.from('transactions').delete().eq('id', id).eq('user_id', user.id);
+    if (user) {
+      const { error } = await supabase.from('transactions').delete().eq('id', id).eq('user_id', user.id);
+      if (error) {
+        console.error("Transaction silme hatası:", error);
+        alert(`Silme işlemi veritabanında başarısız oldu: ${error.message}`);
+      }
+    }
   };
 
   // ------------- BILLS -------------
@@ -211,13 +229,19 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const { data, error } = await supabase.from('bills').insert({ ...b, user_id: user.id }).select().single();
       if (!error && data) {
         setBills(prev => prev.map(bill => bill.id === tempId ? data : bill));
+      } else {
+        console.error("Bill ekleme hatası:", error);
+        alert(`Veritabanına kaydedilemedi (Bills): ${error?.message || 'Bilinmeyen hata'}`);
       }
     }
   };
 
   const updateBill = async (id: string, updatedBill: Omit<Bill, 'id'>) => {
     setBills(prev => prev.map(b => b.id === id ? { ...updatedBill, id } : b));
-    if (user) await supabase.from('bills').update(updatedBill).eq('id', id).eq('user_id', user.id);
+    if (user) {
+      const { error } = await supabase.from('bills').update(updatedBill).eq('id', id).eq('user_id', user.id);
+      if (error) alert(`Güncelleme hatası (Bills): ${error.message}`);
+    }
   };
 
   const payBill = async (id: string, amount: number, date: string) => {
@@ -287,7 +311,10 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const deleteBill = async (id: string) => {
     setBills(prev => prev.filter(b => b.id !== id));
-    if (user) await supabase.from('bills').delete().eq('id', id).eq('user_id', user.id);
+    if (user) {
+      const { error } = await supabase.from('bills').delete().eq('id', id).eq('user_id', user.id);
+      if (error) alert(`Silme hatası (Bills): ${error.message}`);
+    }
   };
 
   // ------------- BUDGETS -------------
@@ -298,7 +325,12 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (user) {
       const bPayload = { category: b.category, limit: b.limit, user_id: user.id };
       const { data, error } = await supabase.from('budgets').insert(bPayload).select().single();
-      if (!error && data) setStoredBudgets(prev => prev.map(budg => budg.id === tempId ? { ...budg, ...data } : budg));
+      if (!error && data) {
+        setStoredBudgets(prev => prev.map(budg => budg.id === tempId ? { ...budg, ...data } : budg));
+      } else {
+        console.error("Budget ekleme hatası:", error);
+        alert(`Veritabanına kaydedilemedi (Budgets): ${error?.message || 'Bilinmeyen hata'}`);
+      }
     }
   };
 
@@ -306,13 +338,17 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setStoredBudgets(prev => prev.map(b => b.id === id ? { ...updatedBudget, id } : b));
     if (user) {
       const bPayload = { category: updatedBudget.category, limit: updatedBudget.limit };
-      await supabase.from('budgets').update(bPayload).eq('id', id).eq('user_id', user.id);
+      const { error } = await supabase.from('budgets').update(bPayload).eq('id', id).eq('user_id', user.id);
+      if (error) alert(`Güncelleme hatası (Budgets): ${error.message}`);
     }
   };
 
   const deleteBudget = async (id: string) => {
     setStoredBudgets(prev => prev.filter(b => b.id !== id));
-    if (user) await supabase.from('budgets').delete().eq('id', id).eq('user_id', user.id);
+    if (user) {
+      const { error } = await supabase.from('budgets').delete().eq('id', id).eq('user_id', user.id);
+      if (error) alert(`Silme hatası (Budgets): ${error.message}`);
+    }
   };
 
   // ------------- INVESTMENTS -------------
@@ -322,18 +358,29 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     
     if (user) {
       const { data, error } = await supabase.from('investments').insert({ ...i, user_id: user.id }).select().single();
-      if (!error && data) setInvestments(prev => prev.map(inv => inv.id === tempId ? data : inv));
+      if (!error && data) {
+        setInvestments(prev => prev.map(inv => inv.id === tempId ? data : inv));
+      } else {
+        console.error("Investment ekleme hatası:", error);
+        alert(`Veritabanına kaydedilemedi (Investments): ${error?.message || 'Bilinmeyen hata'}`);
+      }
     }
   };
 
   const updateInvestment = async (id: string, updatedInvestment: Omit<Investment, 'id'>) => {
     setInvestments(prev => prev.map(i => i.id === id ? { ...updatedInvestment, id } : i));
-    if (user) await supabase.from('investments').update(updatedInvestment).eq('id', id).eq('user_id', user.id);
+    if (user) {
+      const { error } = await supabase.from('investments').update(updatedInvestment).eq('id', id).eq('user_id', user.id);
+      if (error) alert(`Güncelleme hatası (Investments): ${error.message}`);
+    }
   };
 
   const deleteInvestment = async (id: string) => {
     setInvestments(prev => prev.filter(i => i.id !== id));
-    if (user) await supabase.from('investments').delete().eq('id', id).eq('user_id', user.id);
+    if (user) {
+      const { error } = await supabase.from('investments').delete().eq('id', id).eq('user_id', user.id);
+      if (error) alert(`Silme hatası (Investments): ${error.message}`);
+    }
   };
 
   return (
