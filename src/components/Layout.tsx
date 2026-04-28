@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Receipt, FileText, PieChart, TrendingUp, ScanLine, Wallet, Edit2, Check, LineChart, User, Settings, LogOut, LogIn } from 'lucide-react';
+import { LayoutDashboard, Receipt, FileText, PieChart, TrendingUp, ScanLine, Wallet, Edit2, Check, LineChart, User, Settings, LogOut, LogIn, Repeat } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useFinance } from '../context/FinanceContext';
 import { useAuth } from '../context/AuthContext';
@@ -10,6 +10,7 @@ import { AuthModal } from './AuthModal';
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Kontrol Paneli" },
   { to: "/transactions", icon: Receipt, label: "İşlemler" },
+  { to: "/regular-incomes", icon: Repeat, label: "Düzenli Gelirler" },
   { to: "/bills", icon: FileText, label: "Faturalar" },
   { to: "/budget", icon: PieChart, label: "Bütçeler" },
   { to: "/investments", icon: TrendingUp, label: "Yatırımlar" },
@@ -56,6 +57,7 @@ export const Layout: React.FC = () => {
     switch (location.pathname) {
       case '/': return 'Finansal Özet';
       case '/transactions': return 'İşlemler';
+      case '/regular-incomes': return 'Düzenli Gelirler';
       case '/bills': return 'Faturalar';
       case '/budget': return 'Bütçeler';
       case '/investments': return 'Yatırımlar';

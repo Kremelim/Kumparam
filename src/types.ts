@@ -35,6 +35,18 @@ export interface Bill {
   linkedTransactionId?: string;
 }
 
+export interface RegularIncome {
+  id: string;
+  name: string;
+  amount: number;
+  category: string;
+  dueDate: string; // ISO string for the recurring date
+  isProcessed: boolean;
+  recurrence: Recurrence;
+  lastProcessedDate?: string;
+  linkedTransactionId?: string;
+}
+
 export interface NetWorthEntry {
   id: string;
   month: string; // e.g., 'Oca', 'Şub'

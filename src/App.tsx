@@ -16,6 +16,7 @@ import { Investments } from './pages/Investments';
 import { AiScanner } from './pages/AiScanner';
 import { Onboarding } from './pages/Onboarding';
 import { Projection } from './pages/Projection';
+import { RegularIncomes } from './pages/RegularIncomes';
 
 const AppContent = () => {
   const { onboardingDone } = useFinance();
@@ -30,6 +31,7 @@ const AppContent = () => {
         <Route path="/" element={<Layout />}>
           <Route index element={<Dashboard />} />
           <Route path="transactions" element={<Transactions />} />
+          <Route path="regular-incomes" element={<RegularIncomes />} />
           <Route path="bills" element={<Bills />} />
           <Route path="budget" element={<BudgetPage />} />
           <Route path="investments" element={<Investments />} />

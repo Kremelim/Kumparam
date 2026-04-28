@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Transaction, Bill, NetWorthEntry, Investment, Budget, Category, Recurrence } from '../types';
+import { Transaction, Bill, NetWorthEntry, Investment, Budget, Category, Recurrence, RegularIncome } from '../types';
 import { addMonths, addQuarters, addYears, format, parseISO } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { useAuth } from './AuthContext';
@@ -19,6 +19,7 @@ const generateUUID = () => {
 interface FinanceContextType {
   transactions: Transaction[];
   bills: Bill[];
+  regularIncomes: RegularIncome[];
   netWorthHistory: NetWorthEntry[];
   investments: Investment[];
   budgets: Budget[];
@@ -30,6 +31,11 @@ interface FinanceContextType {
   payBill: (id: string, amount: number, date: string) => void;
   undoBillPayment: (billId: string) => void;
   deleteBill: (id: string) => void;
+  addRegularIncome: (ri: Omit<RegularIncome, 'id'>) => void;
+  updateRegularIncome: (id: string, updatedRi: Omit<RegularIncome, 'id'>) => void;
+  processRegularIncome: (id: string, amount: number, date: string) => void;
+  undoRegularIncomeProcess: (id: string) => void;
+  deleteRegularIncome: (id: string) => void;
   addBudget: (b: Omit<Budget, 'id'>) => void;
   updateBudget: (id: string, updatedBudget: Omit<Budget, 'id'>) => void;
   deleteBudget: (id: string) => void;
@@ -62,6 +68,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const [transactions, setTransactions] = useState<Transaction[]>(() => loadFromStorage('fin_transactions', []));
   const [bills, setBills] = useState<Bill[]>(() => loadFromStorage('fin_bills', []));
+  const [regularIncomes, setRegularIncomes] = useState<RegularIncome[]>(() => loadFromStorage('fin_regular_incomes', []));
   const [investments, setInvestments] = useState<Investment[]>(() => loadFromStorage('fin_investments', []));
   const [storedBudgets, setStoredBudgets] = useState<Budget[]>(() => loadFromStorage('fin_budgets', []));
   const [onboardingDone, setOnboardingDone] = useState<boolean>(() => loadFromStorage('fin_onboarding', false));
@@ -71,6 +78,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // Save to local as backup always
   useEffect(() => { localStorage.setItem('fin_transactions', JSON.stringify(transactions)); }, [transactions]);
   useEffect(() => { localStorage.setItem('fin_bills', JSON.stringify(bills)); }, [bills]);
+  useEffect(() => { localStorage.setItem('fin_regular_incomes', JSON.stringify(regularIncomes)); }, [regularIncomes]);
   useEffect(() => { localStorage.setItem('fin_investments', JSON.stringify(investments)); }, [investments]);
   useEffect(() => { localStorage.setItem('fin_budgets', JSON.stringify(storedBudgets)); }, [storedBudgets]);
   useEffect(() => { localStorage.setItem('fin_onboarding', JSON.stringify(onboardingDone)); }, [onboardingDone]);
@@ -82,20 +90,23 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (!user) return;
       setIsLoadingData(true);
       try {
-        const [txRes, billsRes, invRes, budgetsRes] = await Promise.all([
+        const [txRes, billsRes, riRes, invRes, budgetsRes] = await Promise.all([
           supabase.from('transactions').select('*').eq('user_id', user.id),
           supabase.from('bills').select('*').eq('user_id', user.id),
+          supabase.from('regular_incomes').select('*').eq('user_id', user.id),
           supabase.from('investments').select('*').eq('user_id', user.id),
           supabase.from('budgets').select('*').eq('user_id', user.id)
         ]);
 
         if (txRes.data) setTransactions(txRes.data);
         if (billsRes.data) setBills(billsRes.data);
+        if (riRes.data) setRegularIncomes(riRes.data);
         if (invRes.data) setInvestments(invRes.data);
         if (budgetsRes.data) setStoredBudgets(budgetsRes.data);
 
         if (txRes.error) console.error("Transactions fetch error:", txRes.error);
         if (billsRes.error) console.error("Bills fetch error:", billsRes.error);
+        if (riRes.error) console.error("Regular Incomes fetch error:", riRes.error);
         if (invRes.error) console.error("Investments fetch error:", invRes.error);
         if (budgetsRes.error) console.error("Budgets fetch error:", budgetsRes.error);
       } catch (err) {
@@ -329,6 +340,104 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
+  // ------------- REGULAR INCOMES -------------
+  const addRegularIncome = async (ri: Omit<RegularIncome, 'id'>) => {
+    const tempId = generateUUID();
+    setRegularIncomes(prev => [...prev, { ...ri, id: tempId }]);
+    
+    if (user) {
+      const { data, error } = await supabase.from('regular_incomes').insert({ ...ri, id: tempId, user_id: user.id }).select().single();
+      if (!error && data) {
+        setRegularIncomes(prev => prev.map(item => item.id === tempId ? data : item));
+      } else {
+        console.error("Düzenli Gelir ekleme hatası:", error);
+        alert(`Veritabanına kaydedilemedi (Regular Incomes): ${error?.message || 'Bilinmeyen hata'}`);
+      }
+    }
+  };
+
+  const updateRegularIncome = async (id: string, updatedRi: Omit<RegularIncome, 'id'>) => {
+    setRegularIncomes(prev => prev.map(r => r.id === id ? { ...updatedRi, id } : r));
+    if (user) {
+      const { error } = await supabase.from('regular_incomes').update(updatedRi).eq('id', id).eq('user_id', user.id);
+      if (error) alert(`Güncelleme hatası (Regular Incomes): ${error.message}`);
+    }
+  };
+
+  const processRegularIncome = async (id: string, amount: number, date: string) => {
+    const riToProcess = regularIncomes.find(r => r.id === id);
+    if (!riToProcess) return;
+
+    let tempTxId = generateUUID();
+    
+    // Optimistic UI
+    setRegularIncomes(prev => prev.map(r => r.id === id ? { ...r, isProcessed: true, lastProcessedDate: new Date().toISOString(), linkedTransactionId: tempTxId } : r));
+    setTransactions(prev => [...prev, { id: tempTxId, type: 'income', amount, category: riToProcess.category as Category, merchant: riToProcess.name, date, notes: 'Düzenli Gelir' }]);
+
+    if (user) {
+      const { data: insertedTx } = await supabase.from('transactions')
+        .insert({ id: tempTxId, type: 'income', amount, category: riToProcess.category, merchant: riToProcess.name, date, notes: 'Düzenli Gelir', user_id: user.id })
+        .select().single();
+      
+      const realTxId = insertedTx ? insertedTx.id : tempTxId;
+
+      await supabase.from('regular_incomes').update({ isProcessed: true, lastProcessedDate: new Date().toISOString(), linkedTransactionId: realTxId }).eq('id', id).eq('user_id', user.id);
+
+      if (riToProcess.recurrence !== 'none') {
+        const dueDateObj = parseISO(riToProcess.dueDate);
+        let nextDueDate = dueDateObj;
+        if (riToProcess.recurrence === 'monthly') nextDueDate = addMonths(dueDateObj, 1);
+        else if (riToProcess.recurrence === 'quarterly') nextDueDate = addQuarters(dueDateObj, 1);
+        else if (riToProcess.recurrence === 'yearly') nextDueDate = addYears(dueDateObj, 1);
+
+        await supabase.from('regular_incomes').insert({
+          id: generateUUID(),
+          name: riToProcess.name,
+          amount: riToProcess.amount,
+          category: riToProcess.category,
+          dueDate: format(nextDueDate, 'yyyy-MM-dd'),
+          isProcessed: false,
+          recurrence: riToProcess.recurrence,
+          user_id: user.id
+        });
+      }
+
+      // Reload
+      const [txRes, riRes] = await Promise.all([
+          supabase.from('transactions').select('*').eq('user_id', user.id),
+          supabase.from('regular_incomes').select('*').eq('user_id', user.id)
+      ]);
+      if (txRes.data) setTransactions(txRes.data);
+      if (riRes.data) setRegularIncomes(riRes.data);
+    }
+  };
+
+  const undoRegularIncomeProcess = async (id: string) => {
+    const ri = regularIncomes.find(r => r.id === id);
+    if (!ri) return;
+
+    const txIdToDelete = ri.linkedTransactionId;
+    setRegularIncomes(prev => prev.map(r => r.id === id ? { ...r, isProcessed: false, lastProcessedDate: undefined, linkedTransactionId: undefined } : r));
+    if (txIdToDelete) {
+      setTransactions(prev => prev.filter(t => t.id !== txIdToDelete));
+    }
+
+    if (user) {
+      await supabase.from('regular_incomes').update({ isProcessed: false, lastProcessedDate: null, linkedTransactionId: null }).eq('id', id).eq('user_id', user.id);
+      if (txIdToDelete) {
+        await supabase.from('transactions').delete().eq('id', txIdToDelete).eq('user_id', user.id);
+      }
+    }
+  };
+
+  const deleteRegularIncome = async (id: string) => {
+    setRegularIncomes(prev => prev.filter(r => r.id !== id));
+    if (user) {
+      const { error } = await supabase.from('regular_incomes').delete().eq('id', id).eq('user_id', user.id);
+      if (error) alert(`Silme hatası (Regular Incomes): ${error.message}`);
+    }
+  };
+
   // ------------- BUDGETS -------------
   const addBudget = async (b: Omit<Budget, 'id'>) => {
     const tempId = generateUUID();
@@ -397,9 +506,10 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   return (
     <FinanceContext.Provider value={{
-      transactions, bills, netWorthHistory, investments, budgets,
+      transactions, bills, regularIncomes, netWorthHistory, investments, budgets,
       addTransaction, updateTransaction, deleteTransaction, 
       addBill, updateBill, payBill, undoBillPayment, deleteBill,
+      addRegularIncome, updateRegularIncome, processRegularIncome, undoRegularIncomeProcess, deleteRegularIncome,
       addBudget, updateBudget, deleteBudget,
       addInvestment, updateInvestment, deleteInvestment,
       totalIncome, totalExpenses, currentNetWorth,
