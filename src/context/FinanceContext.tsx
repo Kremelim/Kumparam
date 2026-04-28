@@ -5,6 +5,17 @@ import { tr } from 'date-fns/locale';
 import { useAuth } from './AuthContext';
 import { supabase } from '../lib/supabase';
 
+const generateUUID = () => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    var r = Math.random() * 16 | 0;
+    var v = c === 'x' ? r : ((r & 0x3) | 0x8);
+    return v.toString(16);
+  });
+};
+
 interface FinanceContextType {
   transactions: Transaction[];
   bills: Bill[];
@@ -184,11 +195,11 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // ------------- TRANSACTIONS -------------
   const addTransaction = async (t: Omit<Transaction, 'id'>) => {
-    const tempId = Math.random().toString(36).substr(2, 9);
+    const tempId = generateUUID();
     setTransactions(prev => [...prev, { ...t, id: tempId }]);
     
     if (user) {
-      const { data, error } = await supabase.from('transactions').insert({ ...t, user_id: user.id }).select().single();
+      const { data, error } = await supabase.from('transactions').insert({ ...t, id: tempId, user_id: user.id }).select().single();
       if (!error && data) {
         setTransactions(prev => prev.map(tx => tx.id === tempId ? data : tx));
       } else {
@@ -222,11 +233,11 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // ------------- BILLS -------------
   const addBill = async (b: Omit<Bill, 'id'>) => {
-    const tempId = Math.random().toString(36).substr(2, 9);
+    const tempId = generateUUID();
     setBills(prev => [...prev, { ...b, id: tempId }]);
     
     if (user) {
-      const { data, error } = await supabase.from('bills').insert({ ...b, user_id: user.id }).select().single();
+      const { data, error } = await supabase.from('bills').insert({ ...b, id: tempId, user_id: user.id }).select().single();
       if (!error && data) {
         setBills(prev => prev.map(bill => bill.id === tempId ? data : bill));
       } else {
@@ -248,7 +259,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const billToPay = bills.find(b => b.id === id);
     if (!billToPay) return;
 
-    let tempTxId = Math.random().toString(36).substr(2, 9);
+    let tempTxId = generateUUID();
     
     // Optimiztic UI
     setBills(prev => prev.map(b => b.id === id ? { ...b, isPaid: true, lastPaidDate: new Date().toISOString(), linkedTransactionId: tempTxId } : b));
@@ -256,7 +267,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     if (user) {
       const { data: insertedTx } = await supabase.from('transactions')
-        .insert({ type: 'expense', amount, category: billToPay.category, merchant: billToPay.name, date, notes: 'Fatura Ödemesi', user_id: user.id })
+        .insert({ id: tempTxId, type: 'expense', amount, category: billToPay.category, merchant: billToPay.name, date, notes: 'Fatura Ödemesi', user_id: user.id })
         .select().single();
       
       const realTxId = insertedTx ? insertedTx.id : tempTxId;
@@ -271,6 +282,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         else if (billToPay.recurrence === 'yearly') nextDueDate = addYears(dueDateObj, 1);
 
         await supabase.from('bills').insert({
+          id: generateUUID(),
           name: billToPay.name,
           amount: billToPay.amount,
           category: billToPay.category,
@@ -319,11 +331,11 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // ------------- BUDGETS -------------
   const addBudget = async (b: Omit<Budget, 'id'>) => {
-    const tempId = Math.random().toString(36).substr(2, 9);
+    const tempId = generateUUID();
     setStoredBudgets(prev => [...prev, { ...b, id: tempId }]);
     
     if (user) {
-      const bPayload = { category: b.category, limit: b.limit, user_id: user.id };
+      const bPayload = { id: tempId, category: b.category, limit: b.limit, user_id: user.id };
       const { data, error } = await supabase.from('budgets').insert(bPayload).select().single();
       if (!error && data) {
         setStoredBudgets(prev => prev.map(budg => budg.id === tempId ? { ...budg, ...data } : budg));
@@ -353,11 +365,11 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // ------------- INVESTMENTS -------------
   const addInvestment = async (i: Omit<Investment, 'id'>) => {
-    const tempId = Math.random().toString(36).substr(2, 9);
+    const tempId = generateUUID();
     setInvestments(prev => [...prev, { ...i, id: tempId }]);
     
     if (user) {
-      const { data, error } = await supabase.from('investments').insert({ ...i, user_id: user.id }).select().single();
+      const { data, error } = await supabase.from('investments').insert({ ...i, id: tempId, user_id: user.id }).select().single();
       if (!error && data) {
         setInvestments(prev => prev.map(inv => inv.id === tempId ? data : inv));
       } else {
