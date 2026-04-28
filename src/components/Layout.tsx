@@ -5,6 +5,7 @@ import { cn } from '../lib/utils';
 import { useFinance } from '../context/FinanceContext';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
+import { AuthModal } from './AuthModal';
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Kontrol Paneli" },
@@ -23,6 +24,7 @@ export const Layout: React.FC = () => {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [tempTitle, setTempTitle] = useState(appTitle);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -45,11 +47,9 @@ export const Layout: React.FC = () => {
     setIsProfileMenuOpen(false);
   };
 
-  const handleLoginDemo = async () => {
-    // In a real app, this would open a proper login modal or redirect to a login page
-    // For now, we simulate a fake login with Supabase just to trigger the context if keys aren't set
-    // Or guide the user to add credentials via UI
-    alert('Lütfen `.env.example` dosyasındaki Supabase URL ve Anon Key ayarlarınızı yapın ve App.tsx içine bir Auth modalı entegre edin.');
+  const handleLoginClick = () => {
+    setIsProfileMenuOpen(false);
+    setIsAuthModalOpen(true);
   };
 
   const getPageTitle = () => {
@@ -186,8 +186,8 @@ export const Layout: React.FC = () => {
                       </button>
                     </>
                   ) : (
-                    <button onClick={handleLoginDemo} className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-emerald-600 flex items-center gap-2 transition-colors">
-                      <LogIn className="w-4 h-4" /> Giriş Yap (Supabase Gösterimi)
+                    <button onClick={handleLoginClick} className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-emerald-600 flex items-center gap-2 transition-colors">
+                      <LogIn className="w-4 h-4" /> Giriş Yap / Kayıt Ol
                     </button>
                   )}
                 </div>
@@ -203,6 +203,11 @@ export const Layout: React.FC = () => {
           </div>
         </div>
       </main>
+
+      <AuthModal 
+        isOpen={isAuthModalOpen} 
+        onClose={() => setIsAuthModalOpen(false)} 
+      />
     </div>
   );
 };
