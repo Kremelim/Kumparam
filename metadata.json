@@ -1,0 +1,8 @@
+{
+  "name": "Kumparam",
+  "description": "Aile içi gelir, gider, fatura, bütçe ve yatırım takibi yapabileceğiniz finansal yönetim uygulaması. AI ile fiş okuma içerir.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": []
+}
