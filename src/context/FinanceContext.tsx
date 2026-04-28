@@ -2,6 +2,8 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Transaction, Bill, NetWorthEntry, Investment, Budget, Category, Recurrence } from '../types';
 import { addMonths, addQuarters, addYears, format, parseISO } from 'date-fns';
 import { tr } from 'date-fns/locale';
+import { useAuth } from './AuthContext';
+import { supabase } from '../lib/supabase';
 
 interface FinanceContextType {
   transactions: Transaction[];
@@ -31,16 +33,14 @@ interface FinanceContextType {
   skipOnboarding: () => void;
   appTitle: string;
   setAppTitle: (title: string) => void;
+  isLoadingData: boolean;
 }
 
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
 
-const initialTransactions: Transaction[] = [];
-const initialBills: Bill[] = [];
-const initialInvestments: Investment[] = [];
-const initialBudgets: Budget[] = [];
-
 export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user } = useAuth();
+
   const loadFromStorage = <T,>(key: string, _defaultValue: T): T => {
     try {
       const saved = localStorage.getItem(key);
@@ -49,38 +49,49 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return _defaultValue;
   };
 
-  const [transactions, setTransactions] = useState<Transaction[]>(() => loadFromStorage('fin_transactions', initialTransactions));
-  const [bills, setBills] = useState<Bill[]>(() => loadFromStorage('fin_bills', initialBills));
-  const [investments, setInvestments] = useState<Investment[]>(() => loadFromStorage('fin_investments', initialInvestments));
-  const [storedBudgets, setStoredBudgets] = useState<Budget[]>(() => loadFromStorage('fin_budgets', initialBudgets));
+  const [transactions, setTransactions] = useState<Transaction[]>(() => loadFromStorage('fin_transactions', []));
+  const [bills, setBills] = useState<Bill[]>(() => loadFromStorage('fin_bills', []));
+  const [investments, setInvestments] = useState<Investment[]>(() => loadFromStorage('fin_investments', []));
+  const [storedBudgets, setStoredBudgets] = useState<Budget[]>(() => loadFromStorage('fin_budgets', []));
   const [onboardingDone, setOnboardingDone] = useState<boolean>(() => loadFromStorage('fin_onboarding', false));
-  const [appTitle, setAppTitle] = useState<string>(() => loadFromStorage('fin_app_title', 'Finans Asistanım'));
+  const [appTitle, setAppTitle] = useState<string>(() => loadFromStorage('fin_app_title', 'Kumparam'));
+  const [isLoadingData, setIsLoadingData] = useState(false);
 
+  // Save to local as backup always
+  useEffect(() => { localStorage.setItem('fin_transactions', JSON.stringify(transactions)); }, [transactions]);
+  useEffect(() => { localStorage.setItem('fin_bills', JSON.stringify(bills)); }, [bills]);
+  useEffect(() => { localStorage.setItem('fin_investments', JSON.stringify(investments)); }, [investments]);
+  useEffect(() => { localStorage.setItem('fin_budgets', JSON.stringify(storedBudgets)); }, [storedBudgets]);
+  useEffect(() => { localStorage.setItem('fin_onboarding', JSON.stringify(onboardingDone)); }, [onboardingDone]);
+  useEffect(() => { localStorage.setItem('fin_app_title', JSON.stringify(appTitle)); }, [appTitle]);
+
+  // Load from Supabase on user init
   useEffect(() => {
-    localStorage.setItem('fin_transactions', JSON.stringify(transactions));
-  }, [transactions]);
+    const fetchData = async () => {
+      if (!user) return;
+      setIsLoadingData(true);
+      try {
+        const [txRes, billsRes, invRes, budgetsRes] = await Promise.all([
+          supabase.from('transactions').select('*').eq('user_id', user.id),
+          supabase.from('bills').select('*').eq('user_id', user.id),
+          supabase.from('investments').select('*').eq('user_id', user.id),
+          supabase.from('budgets').select('*').eq('user_id', user.id)
+        ]);
 
-  useEffect(() => {
-    localStorage.setItem('fin_bills', JSON.stringify(bills));
-  }, [bills]);
+        if (txRes.data) setTransactions(txRes.data);
+        if (billsRes.data) setBills(billsRes.data);
+        if (invRes.data) setInvestments(invRes.data);
+        if (budgetsRes.data) setStoredBudgets(budgetsRes.data);
+      } catch (err) {
+        console.error("Supabase veri yükleme hatası:", err);
+      } finally {
+        setIsLoadingData(false);
+      }
+    };
+    fetchData();
+  }, [user]);
 
-  useEffect(() => {
-    localStorage.setItem('fin_investments', JSON.stringify(investments));
-  }, [investments]);
-
-  useEffect(() => {
-    localStorage.setItem('fin_budgets', JSON.stringify(storedBudgets));
-  }, [storedBudgets]);
-
-  useEffect(() => {
-    localStorage.setItem('fin_onboarding', JSON.stringify(onboardingDone));
-  }, [onboardingDone]);
-
-  useEffect(() => {
-    localStorage.setItem('fin_app_title', JSON.stringify(appTitle));
-  }, [appTitle]);
-
-  // Dynamic calculate spent for budgets based on current context
+  // Computations
   const budgets: Budget[] = storedBudgets.map(b => ({
     ...b,
     spent: transactions.filter(t => t.category === b.category && t.type === 'expense').reduce((a, t) => a + t.amount, 0)
@@ -88,11 +99,9 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const totalIncome = transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
   const totalExpenses = transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
-  
   const totalInvestments = investments.reduce((sum, inv) => sum + inv.value, 0);
   const currentNetWorth = (totalIncome - totalExpenses) + totalInvestments;
 
-  // Generate history based on real net worth
   const [netWorthHistory, setNetWorthHistory] = useState<NetWorthEntry[]>([]);
   
   useEffect(() => {
@@ -108,26 +117,16 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       return;
     }
 
-    // Sort transactions by date ascending
     const sortedTxs = [...transactions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    
-    // Group by month
     const groupedByMonth: { [key: string]: { income: number, expense: number } } = {};
     sortedTxs.forEach(t => {
       const monthKey = format(new Date(t.date), 'yyyy-MM');
-      if (!groupedByMonth[monthKey]) {
-        groupedByMonth[monthKey] = { income: 0, expense: 0 };
-      }
-      if (t.type === 'income') {
-        groupedByMonth[monthKey].income += t.amount;
-      } else {
-        groupedByMonth[monthKey].expense += t.amount;
-      }
+      if (!groupedByMonth[monthKey]) groupedByMonth[monthKey] = { income: 0, expense: 0 };
+      if (t.type === 'income') groupedByMonth[monthKey].income += t.amount;
+      else groupedByMonth[monthKey].expense += t.amount;
     });
 
     const monthKeys = Object.keys(groupedByMonth).sort();
-    
-    // Make sure we include current month even if no transactions this month
     const currentMonthKey = format(new Date(), 'yyyy-MM');
     if (!groupedByMonth[currentMonthKey] && !monthKeys.includes(currentMonthKey)) {
       groupedByMonth[currentMonthKey] = { income: 0, expense: 0 };
@@ -144,14 +143,11 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
 
     const history: NetWorthEntry[] = [];
-    let cumulative = 0; // base running net income
+    let cumulative = 0; 
 
     monthsList.forEach((mKey, idx) => {
        const mData = groupedByMonth[mKey] || { income: 0, expense: 0 };
        cumulative += (mData.income - mData.expense);
-       
-       // current total includes investments
-       const totalInvestments = investments.reduce((sum, inv) => sum + inv.value, 0);
        const monthTotal = cumulative + totalInvestments;
        const prevTotal = idx > 0 ? history[idx-1].total : monthTotal - (mData.income - mData.expense);
 
@@ -169,147 +165,175 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [transactions, investments, currentNetWorth]);
 
   const completeOnboarding = (salary: number, rent: number, billsValue: number) => {
-    const newTx: Transaction[] = [];
-    if (salary > 0) newTx.push({ id: Math.random().toString(36).substr(2, 9), type: 'income', amount: salary, category: 'Maaş', merchant: 'İşveren', date: format(new Date(), 'yyyy-MM-dd'), notes: 'Başlangıç Maaşı' });
-    if (rent > 0) newTx.push({ id: Math.random().toString(36).substr(2, 9), type: 'expense', amount: rent, category: 'Kira', merchant: 'Ev Sahibi', date: format(new Date(), 'yyyy-MM-dd') });
-    
-    setTransactions(prev => [...prev, ...newTx]);
-    
-    const newBudgets: Budget[] = [];
-    if (rent > 0) newBudgets.push({ id: Math.random().toString(36).substr(2, 9), category: 'Kira', limit: rent, spent: 0 });
-    if (billsValue > 0) newBudgets.push({ id: Math.random().toString(36).substr(2, 9), category: 'Faturalar', limit: billsValue, spent: 0 });
-    
-    setStoredBudgets(prev => [...prev, ...newBudgets]);
     setOnboardingDone(true);
+    // Let's rely on simple add records, they handle Supabase sync internally
+    if (salary > 0) addTransaction({ type: 'income', amount: salary, category: 'Maaş', merchant: 'İşveren', date: format(new Date(), 'yyyy-MM-dd'), notes: 'Başlangıç Maaşı' });
+    if (rent > 0) {
+      addTransaction({ type: 'expense', amount: rent, category: 'Kira', merchant: 'Ev Sahibi', date: format(new Date(), 'yyyy-MM-dd') });
+      addBudget({ category: 'Kira', limit: rent, spent: 0 });
+    }
+    if (billsValue > 0) addBudget({ category: 'Faturalar', limit: billsValue, spent: 0 });
   };
 
   const skipOnboarding = () => setOnboardingDone(true);
 
-  const addTransaction = (t: Omit<Transaction, 'id'>) => {
-    const newTx: Transaction = { ...t, id: Math.random().toString(36).substr(2, 9) };
-    setTransactions(prev => [...prev, newTx]);
-  };
-
-  const updateTransaction = (id: string, updatedTx: Omit<Transaction, 'id'>) => {
-    setTransactions(prev => prev.map(t => t.id === id ? { ...updatedTx, id } : t));
-  };
-
-  const deleteTransaction = (id: string) => {
-    setTransactions(prev => prev.filter(t => t.id !== id));
-  };
-
-  const addBill = (b: Omit<Bill, 'id'>) => {
-    const newBill: Bill = { ...b, id: Math.random().toString(36).substr(2, 9) };
-    setBills(prev => [...prev, newBill]);
-  };
-
-  const updateBill = (id: string, updatedBill: Omit<Bill, 'id'>) => {
-    setBills(prev => prev.map(b => b.id === id ? { ...updatedBill, id } : b));
-  };
-
-  const payBill = (id: string, amount: number, date: string) => {
-    let txId = Math.random().toString(36).substr(2, 9);
+  // ------------- TRANSACTIONS -------------
+  const addTransaction = async (t: Omit<Transaction, 'id'>) => {
+    const tempId = Math.random().toString(36).substr(2, 9);
+    setTransactions(prev => [...prev, { ...t, id: tempId }]);
     
-    // Add transaction first
-    setBills(prev => {
-      const bill = prev.find(b => b.id === id);
-      if (!bill) return prev;
+    if (user) {
+      const { data, error } = await supabase.from('transactions').insert({ ...t, user_id: user.id }).select().single();
+      if (!error && data) {
+        setTransactions(prev => prev.map(tx => tx.id === tempId ? data : tx));
+      } else {
+        console.error("Yükleme hatası:", error);
+      }
+    }
+  };
 
-      const updatedBills = prev.map(b => b.id === id ? { 
-        ...b, 
-        isPaid: true, 
-        lastPaidDate: new Date().toISOString(),
-        linkedTransactionId: txId
-      } : b);
+  const updateTransaction = async (id: string, updatedTx: Omit<Transaction, 'id'>) => {
+    setTransactions(prev => prev.map(t => t.id === id ? { ...updatedTx, id } : t));
+    if (user) await supabase.from('transactions').update(updatedTx).eq('id', id).eq('user_id', user.id);
+  };
 
-      if (bill.recurrence !== 'none') {
-        const dueDateObj = parseISO(bill.dueDate);
+  const deleteTransaction = async (id: string) => {
+    setTransactions(prev => prev.filter(t => t.id !== id));
+    if (user) await supabase.from('transactions').delete().eq('id', id).eq('user_id', user.id);
+  };
+
+  // ------------- BILLS -------------
+  const addBill = async (b: Omit<Bill, 'id'>) => {
+    const tempId = Math.random().toString(36).substr(2, 9);
+    setBills(prev => [...prev, { ...b, id: tempId }]);
+    
+    if (user) {
+      const { data, error } = await supabase.from('bills').insert({ ...b, user_id: user.id }).select().single();
+      if (!error && data) {
+        setBills(prev => prev.map(bill => bill.id === tempId ? data : bill));
+      }
+    }
+  };
+
+  const updateBill = async (id: string, updatedBill: Omit<Bill, 'id'>) => {
+    setBills(prev => prev.map(b => b.id === id ? { ...updatedBill, id } : b));
+    if (user) await supabase.from('bills').update(updatedBill).eq('id', id).eq('user_id', user.id);
+  };
+
+  const payBill = async (id: string, amount: number, date: string) => {
+    const billToPay = bills.find(b => b.id === id);
+    if (!billToPay) return;
+
+    let tempTxId = Math.random().toString(36).substr(2, 9);
+    
+    // Optimiztic UI
+    setBills(prev => prev.map(b => b.id === id ? { ...b, isPaid: true, lastPaidDate: new Date().toISOString(), linkedTransactionId: tempTxId } : b));
+    setTransactions(prev => [...prev, { id: tempTxId, type: 'expense', amount, category: billToPay.category as Category, merchant: billToPay.name, date, notes: 'Fatura Ödemesi' }]);
+
+    if (user) {
+      const { data: insertedTx } = await supabase.from('transactions')
+        .insert({ type: 'expense', amount, category: billToPay.category, merchant: billToPay.name, date, notes: 'Fatura Ödemesi', user_id: user.id })
+        .select().single();
+      
+      const realTxId = insertedTx ? insertedTx.id : tempTxId;
+
+      await supabase.from('bills').update({ isPaid: true, lastPaidDate: new Date().toISOString(), linkedTransactionId: realTxId }).eq('id', id).eq('user_id', user.id);
+
+      if (billToPay.recurrence !== 'none') {
+        const dueDateObj = parseISO(billToPay.dueDate);
         let nextDueDate = dueDateObj;
-        if (bill.recurrence === 'monthly') nextDueDate = addMonths(dueDateObj, 1);
-        else if (bill.recurrence === 'quarterly') nextDueDate = addQuarters(dueDateObj, 1);
-        else if (bill.recurrence === 'yearly') nextDueDate = addYears(dueDateObj, 1);
+        if (billToPay.recurrence === 'monthly') nextDueDate = addMonths(dueDateObj, 1);
+        else if (billToPay.recurrence === 'quarterly') nextDueDate = addQuarters(dueDateObj, 1);
+        else if (billToPay.recurrence === 'yearly') nextDueDate = addYears(dueDateObj, 1);
 
-        const nextBill: Bill = {
-          ...bill,
-          id: Math.random().toString(36).substr(2, 9),
+        await supabase.from('bills').insert({
+          name: billToPay.name,
+          amount: billToPay.amount,
+          category: billToPay.category,
           dueDate: format(nextDueDate, 'yyyy-MM-dd'),
           isPaid: false,
-          lastPaidDate: undefined,
-          linkedTransactionId: undefined
-        };
-        updatedBills.push(nextBill);
+          recurrence: billToPay.recurrence,
+          user_id: user.id
+        });
       }
 
-      return updatedBills;
-    });
-
-    // Handle transaction addition outside of setBills callback
-    const currentBills = bills;
-    const billToPay = currentBills.find(b => b.id === id);
-    if (billToPay) {
-      const newTx: Transaction = {
-        id: txId,
-        type: 'expense',
-        amount: amount,
-        category: billToPay.category,
-        merchant: billToPay.name,
-        date: date,
-        notes: 'Fatura Ödemesi'
-      };
-      setTransactions(prev => [...prev, newTx]);
+      // Reload
+      const [txRes, billsRes] = await Promise.all([
+          supabase.from('transactions').select('*').eq('user_id', user.id),
+          supabase.from('bills').select('*').eq('user_id', user.id)
+      ]);
+      if (txRes.data) setTransactions(txRes.data);
+      if (billsRes.data) setBills(billsRes.data);
     }
   };
 
-  const undoBillPayment = (id: string) => {
-    let txIdToDelete: string | undefined;
+  const undoBillPayment = async (id: string) => {
+    const bill = bills.find(b => b.id === id);
+    if (!bill) return;
 
-    setBills(prev => {
-      const bill = prev.find(b => b.id === id);
-      if (!bill) return prev;
-
-      txIdToDelete = bill.linkedTransactionId;
-
-      return prev.map(b => b.id === id ? {
-        ...b,
-        isPaid: false,
-        lastPaidDate: undefined,
-        linkedTransactionId: undefined
-      } : b);
-    });
-
+    const txIdToDelete = bill.linkedTransactionId;
+    setBills(prev => prev.map(b => b.id === id ? { ...b, isPaid: false, lastPaidDate: undefined, linkedTransactionId: undefined } : b));
     if (txIdToDelete) {
-      deleteTransaction(txIdToDelete);
+      setTransactions(prev => prev.filter(t => t.id !== txIdToDelete));
+    }
+
+    if (user) {
+      await supabase.from('bills').update({ isPaid: false, lastPaidDate: null, linkedTransactionId: null }).eq('id', id).eq('user_id', user.id);
+      if (txIdToDelete) {
+        await supabase.from('transactions').delete().eq('id', txIdToDelete).eq('user_id', user.id);
+      }
     }
   };
 
-  const deleteBill = (id: string) => {
+  const deleteBill = async (id: string) => {
     setBills(prev => prev.filter(b => b.id !== id));
+    if (user) await supabase.from('bills').delete().eq('id', id).eq('user_id', user.id);
   };
 
-  const addBudget = (b: Omit<Budget, 'id'>) => {
-    const newBudget: Budget = { ...b, id: Math.random().toString(36).substr(2, 9) };
-    setStoredBudgets(prev => [...prev, newBudget]);
+  // ------------- BUDGETS -------------
+  const addBudget = async (b: Omit<Budget, 'id'>) => {
+    const tempId = Math.random().toString(36).substr(2, 9);
+    setStoredBudgets(prev => [...prev, { ...b, id: tempId }]);
+    
+    if (user) {
+      const bPayload = { category: b.category, limit: b.limit, user_id: user.id };
+      const { data, error } = await supabase.from('budgets').insert(bPayload).select().single();
+      if (!error && data) setStoredBudgets(prev => prev.map(budg => budg.id === tempId ? { ...budg, ...data } : budg));
+    }
   };
 
-  const updateBudget = (id: string, updatedBudget: Omit<Budget, 'id'>) => {
+  const updateBudget = async (id: string, updatedBudget: Omit<Budget, 'id'>) => {
     setStoredBudgets(prev => prev.map(b => b.id === id ? { ...updatedBudget, id } : b));
+    if (user) {
+      const bPayload = { category: updatedBudget.category, limit: updatedBudget.limit };
+      await supabase.from('budgets').update(bPayload).eq('id', id).eq('user_id', user.id);
+    }
   };
 
-  const deleteBudget = (id: string) => {
+  const deleteBudget = async (id: string) => {
     setStoredBudgets(prev => prev.filter(b => b.id !== id));
+    if (user) await supabase.from('budgets').delete().eq('id', id).eq('user_id', user.id);
   };
 
-  const addInvestment = (i: Omit<Investment, 'id'>) => {
-    const newInv: Investment = { ...i, id: Math.random().toString(36).substr(2, 9) };
-    setInvestments(prev => [...prev, newInv]);
+  // ------------- INVESTMENTS -------------
+  const addInvestment = async (i: Omit<Investment, 'id'>) => {
+    const tempId = Math.random().toString(36).substr(2, 9);
+    setInvestments(prev => [...prev, { ...i, id: tempId }]);
+    
+    if (user) {
+      const { data, error } = await supabase.from('investments').insert({ ...i, user_id: user.id }).select().single();
+      if (!error && data) setInvestments(prev => prev.map(inv => inv.id === tempId ? data : inv));
+    }
   };
 
-  const updateInvestment = (id: string, updatedInvestment: Omit<Investment, 'id'>) => {
+  const updateInvestment = async (id: string, updatedInvestment: Omit<Investment, 'id'>) => {
     setInvestments(prev => prev.map(i => i.id === id ? { ...updatedInvestment, id } : i));
+    if (user) await supabase.from('investments').update(updatedInvestment).eq('id', id).eq('user_id', user.id);
   };
 
-  const deleteInvestment = (id: string) => {
+  const deleteInvestment = async (id: string) => {
     setInvestments(prev => prev.filter(i => i.id !== id));
+    if (user) await supabase.from('investments').delete().eq('id', id).eq('user_id', user.id);
   };
 
   return (
@@ -321,7 +345,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       addInvestment, updateInvestment, deleteInvestment,
       totalIncome, totalExpenses, currentNetWorth,
       onboardingDone, completeOnboarding, skipOnboarding,
-      appTitle, setAppTitle
+      appTitle, setAppTitle, isLoadingData
     }}>
       {children}
     </FinanceContext.Provider>
