@@ -120,8 +120,26 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         if (riRes.data) setRegularIncomes(riRes.data);
         if (invRes.data) setInvestments(invRes.data);
         if (budgetsRes.data) setStoredBudgets(budgetsRes.data);
-        if (projItemsRes.data) setProjectionItems(projItemsRes.data);
-        if (projSettingsRes.data) setProjectionSettings(projSettingsRes.data);
+        if (projItemsRes.data) {
+          setProjectionItems(projItemsRes.data.map((item: any) => ({
+            id: item.id,
+            name: item.name,
+            type: item.type,
+            amount: item.amount,
+            day: item.day,
+            isOneTime: item.is_one_time,
+            oneTimeDate: item.one_time_date,
+            recurringMonths: item.recurring_months,
+            createdAt: item.created_at
+          })));
+        }
+        if (projSettingsRes.data) {
+          setProjectionSettings({
+            annualGrossRate: projSettingsRes.data.annual_gross_rate ?? 35.0,
+            taxRate: projSettingsRes.data.tax_rate ?? 17.5,
+            projectionPeriod: projSettingsRes.data.projection_period ?? 365
+          });
+        }
 
         if (txRes.error) console.error("Transactions fetch error:", txRes.error);
         if (billsRes.error) console.error("Bills fetch error:", billsRes.error);

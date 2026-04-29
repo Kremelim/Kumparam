@@ -466,8 +466,8 @@ export const Projection: React.FC = () => {
 
             <div className="pt-5 border-t border-slate-100">
               <p className="text-xs font-bold text-slate-400 mb-3 uppercase tracking-wider">Hızlı Akış Ekle</p>
-              <div className="grid grid-cols-2 lg:grid-cols-7 gap-3 items-end">
-                <div className="col-span-2 lg:col-span-2">
+              <div className="flex flex-wrap gap-3 items-end">
+                <div className="w-full md:w-56 lg:w-64">
                   <label className="text-[10px] font-bold text-slate-500 block mb-1">Kategori / İsim</label>
                   <input 
                     placeholder="Örn: Aidat" 
@@ -476,7 +476,7 @@ export const Projection: React.FC = () => {
                     className="w-full text-sm font-bold border border-slate-200 bg-white rounded-lg p-2.5 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
                   />
                 </div>
-                <div className="col-span-1 lg:col-span-1">
+                <div className="flex-1 min-w-[120px] max-w-full md:max-w-[150px]">
                   <label className="text-[10px] font-bold text-slate-500 block mb-1">Tutar (₺)</label>
                   <input 
                     type="number" 
@@ -485,7 +485,7 @@ export const Projection: React.FC = () => {
                     className="w-full text-sm font-bold border border-slate-200 bg-white rounded-lg p-2.5 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
                   />
                 </div>
-                <div className="col-span-1 lg:col-span-1">
+                <div className="flex-1 min-w-[120px] max-w-full md:max-w-[150px]">
                   <label className="text-[10px] font-bold text-slate-500 block mb-1">Sıklık</label>
                   <select 
                     value={newItem.isOneTime ? 'once' : 'recurring'} 
@@ -493,11 +493,11 @@ export const Projection: React.FC = () => {
                     className="w-full text-sm font-bold border border-slate-200 bg-white rounded-lg p-2.5 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 appearance-none"
                   >
                     <option value="recurring">Rutin</option>
-                    <option value="once">Tek Seferlik</option>
+                    <option value="once">Tek Sefer</option>
                   </select>
                 </div>
                 {!newItem.isOneTime && (
-                  <div className="col-span-1 lg:col-span-1">
+                  <div className="flex-1 min-w-[120px] max-w-full md:max-w-[150px]">
                     <label className="text-[10px] font-bold text-slate-500 block mb-1">Süre</label>
                     <select 
                       value={newItem.recurringMonths || 0} 
@@ -511,7 +511,7 @@ export const Projection: React.FC = () => {
                     </select>
                   </div>
                 )}
-                <div className="col-span-1 lg:col-span-1">
+                <div className="flex-1 min-w-[120px] max-w-full md:max-w-[150px]">
                   <label className="text-[10px] font-bold text-slate-500 block mb-1">Tür</label>
                   <select 
                     value={newItem.type} 
@@ -522,14 +522,14 @@ export const Projection: React.FC = () => {
                     <option value="income">Gelir (+)</option>
                   </select>
                 </div>
-                <div className="col-span-1 lg:col-span-1">
+                <div className="flex-1 min-w-[145px] max-w-full md:max-w-[170px]">
                   <label className="text-[10px] font-bold text-slate-500 block mb-1">{newItem.isOneTime ? "Tarih" : "Ödeme Günü"}</label>
                   {newItem.isOneTime ? (
                      <input 
                        type="date" 
                        value={newItem.oneTimeDate || ''} 
                        onChange={e => setNewItem({...newItem, oneTimeDate: e.target.value})}
-                       className="w-full min-w-0 md:min-w-[130px] lg:min-w-0 text-[13px] font-bold border border-slate-200 bg-white rounded-lg p-2.5 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                       className="w-full text-[13px] font-bold border border-slate-200 bg-white rounded-lg p-2.5 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
                      />
                   ) : (
                     <div className="relative">
@@ -543,7 +543,7 @@ export const Projection: React.FC = () => {
                     </div>
                   )}
                 </div>
-                <div className="col-span-2 lg:col-span-7 xl:col-span-1 mt-2 lg:mt-0 xl:-ml-2">
+                <div className="w-full xl:w-auto mt-2 xl:mt-0 xl:-ml-1">
                   <button 
                     onClick={handleAddItem}
                     className="w-full h-[42px] px-6 bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm rounded-lg flex items-center justify-center transition-colors shadow-sm"
