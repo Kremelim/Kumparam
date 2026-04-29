@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Transaction, Bill, NetWorthEntry, Investment, Budget, Category, Recurrence, RegularIncome } from '../types';
+import { Transaction, Bill, NetWorthEntry, Investment, Budget, Category, Recurrence, RegularIncome, SimItem, ProjectionSettings } from '../types';
 import { addMonths, addQuarters, addYears, format, parseISO } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { useAuth } from './AuthContext';
@@ -42,6 +42,12 @@ interface FinanceContextType {
   addInvestment: (i: Omit<Investment, 'id'>) => void;
   updateInvestment: (id: string, updatedInvestment: Omit<Investment, 'id'>) => void;
   deleteInvestment: (id: string) => void;
+  projectionItems: SimItem[];
+  addProjectionItem: (item: Omit<SimItem, 'id'>) => void;
+  updateProjectionItem: (id: string, updatedItem: Omit<SimItem, 'id'>) => void;
+  deleteProjectionItem: (id: string) => void;
+  projectionSettings: ProjectionSettings;
+  updateProjectionSettings: (settings: ProjectionSettings) => void;
   totalIncome: number;
   totalExpenses: number;
   currentNetWorth: number;
@@ -74,6 +80,13 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [onboardingDone, setOnboardingDone] = useState<boolean>(() => loadFromStorage('fin_onboarding', false));
   const [appTitle, setAppTitle] = useState<string>(() => loadFromStorage('fin_app_title', 'Kumparam'));
   const [isLoadingData, setIsLoadingData] = useState(false);
+  
+  const [projectionItems, setProjectionItems] = useState<SimItem[]>(() => loadFromStorage('fin_proj_items', []));
+  const [projectionSettings, setProjectionSettings] = useState<ProjectionSettings>(() => loadFromStorage('fin_proj_settings', {
+    annualGrossRate: 35.0,
+    taxRate: 17.5,
+    projectionPeriod: 365
+  }));
 
   // Save to local as backup always
   useEffect(() => { localStorage.setItem('fin_transactions', JSON.stringify(transactions)); }, [transactions]);
@@ -83,6 +96,8 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => { localStorage.setItem('fin_budgets', JSON.stringify(storedBudgets)); }, [storedBudgets]);
   useEffect(() => { localStorage.setItem('fin_onboarding', JSON.stringify(onboardingDone)); }, [onboardingDone]);
   useEffect(() => { localStorage.setItem('fin_app_title', JSON.stringify(appTitle)); }, [appTitle]);
+  useEffect(() => { localStorage.setItem('fin_proj_items', JSON.stringify(projectionItems)); }, [projectionItems]);
+  useEffect(() => { localStorage.setItem('fin_proj_settings', JSON.stringify(projectionSettings)); }, [projectionSettings]);
 
   // Load from Supabase on user init
   useEffect(() => {
@@ -90,12 +105,14 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (!user) return;
       setIsLoadingData(true);
       try {
-        const [txRes, billsRes, riRes, invRes, budgetsRes] = await Promise.all([
+        const [txRes, billsRes, riRes, invRes, budgetsRes, projItemsRes, projSettingsRes] = await Promise.all([
           supabase.from('transactions').select('*').eq('user_id', user.id),
           supabase.from('bills').select('*').eq('user_id', user.id),
           supabase.from('regular_incomes').select('*').eq('user_id', user.id),
           supabase.from('investments').select('*').eq('user_id', user.id),
-          supabase.from('budgets').select('*').eq('user_id', user.id)
+          supabase.from('budgets').select('*').eq('user_id', user.id),
+          supabase.from('projection_items').select('*').eq('user_id', user.id),
+          supabase.from('projection_settings').select('*').eq('user_id', user.id).maybeSingle()
         ]);
 
         if (txRes.data) setTransactions(txRes.data);
@@ -103,12 +120,16 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         if (riRes.data) setRegularIncomes(riRes.data);
         if (invRes.data) setInvestments(invRes.data);
         if (budgetsRes.data) setStoredBudgets(budgetsRes.data);
+        if (projItemsRes.data) setProjectionItems(projItemsRes.data);
+        if (projSettingsRes.data) setProjectionSettings(projSettingsRes.data);
 
         if (txRes.error) console.error("Transactions fetch error:", txRes.error);
         if (billsRes.error) console.error("Bills fetch error:", billsRes.error);
         if (riRes.error) console.error("Regular Incomes fetch error:", riRes.error);
         if (invRes.error) console.error("Investments fetch error:", invRes.error);
         if (budgetsRes.error) console.error("Budgets fetch error:", budgetsRes.error);
+        if (projItemsRes.error) console.error("Proj Items fetch error:", projItemsRes.error);
+        if (projSettingsRes.error) console.error("Proj Settings fetch error:", projSettingsRes.error);
       } catch (err) {
         console.error("Supabase veri yükleme hatası:", err);
       } finally {
@@ -504,6 +525,74 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
+  // ------------- PROJECTIONS -------------
+  const addProjectionItem = async (item: Omit<SimItem, 'id'>) => {
+    const tempId = generateUUID();
+    const newItem = { ...item, id: tempId };
+    setProjectionItems(prev => [...prev, newItem]);
+    
+    if (user) {
+      // transform camelCase to snake_case for DB (or we match it in DB schema)
+      // I will assume the DB schema is exact match or uses column wrapping. 
+      // ACTUALLY wait!! Is there a problem if I send oneTimeDate? Supabase columns are usually snake_case, but let's just use what's in SimItem but mapped.
+      // Easiest is just map exactly to camelCase in the table creation if we are sending camelCase.
+      const dbPayload = {
+        id: tempId, user_id: user.id,
+        name: item.name, type: item.type, amount: item.amount, day: item.day,
+        is_one_time: item.isOneTime, one_time_date: item.oneTimeDate,
+        recurring_months: item.recurringMonths, created_at: item.createdAt || new Date().toISOString()
+      };
+      
+      const { data, error } = await supabase.from('projection_items').insert(dbPayload).select().single();
+      if (!error && data) {
+         // data mapping from DB logic if returned snake_case
+         setProjectionItems(prev => prev.map(pi => pi.id === tempId ? {
+            id: data.id, name: data.name, type: data.type, amount: data.amount, day: data.day,
+            isOneTime: data.is_one_time, oneTimeDate: data.one_time_date, 
+            recurringMonths: data.recurring_months, createdAt: data.created_at
+         } : pi));
+      } else {
+        console.error("Proj Item ekleme hatası:", error);
+      }
+    }
+  };
+
+  const updateProjectionItem = async (id: string, updatedItem: Omit<SimItem, 'id'>) => {
+    setProjectionItems(prev => prev.map(i => i.id === id ? { ...updatedItem, id } : i));
+    if (user) {
+      const dbPayload = {
+        name: updatedItem.name, type: updatedItem.type, amount: updatedItem.amount, day: updatedItem.day,
+        is_one_time: updatedItem.isOneTime, one_time_date: updatedItem.oneTimeDate,
+        recurring_months: updatedItem.recurringMonths, created_at: updatedItem.createdAt
+      };
+      const { error } = await supabase.from('projection_items').update(dbPayload).eq('id', id).eq('user_id', user.id);
+      if (error) console.error("Proj Item güncelleme hatası:", error);
+    }
+  };
+
+  const deleteProjectionItem = async (id: string) => {
+    setProjectionItems(prev => prev.filter(i => i.id !== id));
+    if (user) {
+      const { error } = await supabase.from('projection_items').delete().eq('id', id).eq('user_id', user.id);
+      if (error) console.error("Proj Item silme hatası:", error);
+    }
+  };
+
+  const updateProjectionSettings = async (settings: ProjectionSettings) => {
+    setProjectionSettings(settings);
+    if (user) {
+      const dbPayload = {
+        user_id: user.id,
+        annual_gross_rate: settings.annualGrossRate,
+        tax_rate: settings.taxRate,
+        projection_period: settings.projectionPeriod
+      };
+      // Upsert
+      const { error } = await supabase.from('projection_settings').upsert(dbPayload, { onConflict: 'user_id' });
+      if (error) console.error("Proj Settings hata:", error);
+    }
+  };
+
   return (
     <FinanceContext.Provider value={{
       transactions, bills, regularIncomes, netWorthHistory, investments, budgets,
@@ -512,6 +601,8 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       addRegularIncome, updateRegularIncome, processRegularIncome, undoRegularIncomeProcess, deleteRegularIncome,
       addBudget, updateBudget, deleteBudget,
       addInvestment, updateInvestment, deleteInvestment,
+      projectionItems, addProjectionItem, updateProjectionItem, deleteProjectionItem,
+      projectionSettings, updateProjectionSettings,
       totalIncome, totalExpenses, currentNetWorth,
       onboardingDone, completeOnboarding, skipOnboarding,
       appTitle, setAppTitle, isLoadingData

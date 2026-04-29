@@ -71,3 +71,23 @@ export interface Budget {
   limit: number;
   spent: number;
 }
+
+export interface SimItem {
+  id: string;
+  name: string;
+  type: 'income' | 'expense';
+  amount: number;
+  day?: number;
+  isOneTime?: boolean;
+  oneTimeDate?: string;
+  recurringMonths?: number;
+  createdAt?: string;
+}
+
+export interface ProjectionSettings {
+  id?: string;
+  annualGrossRate: number;
+  taxRate: number;
+  projectionPeriod: number;
+}
+

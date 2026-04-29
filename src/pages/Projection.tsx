@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
 import { useFinance } from '../context/FinanceContext';
 import { Calculator, Calendar, Plus, Trash2, Settings, TrendingUp, Sparkles, AlertCircle } from 'lucide-react';
-import { format, getDate, isLastDayOfMonth, startOfMonth, addDays } from 'date-fns';
+import { format, getDate, isLastDayOfMonth, startOfMonth, addDays, parseISO, addMonths, isAfter } from 'date-fns';
 import { tr } from 'date-fns/locale';
 
 interface SimItem {
@@ -13,38 +13,49 @@ interface SimItem {
   day?: number;
   isOneTime?: boolean;
   oneTimeDate?: string;
+  recurringMonths?: number; // 0 for infinite,  3, 6, 12, etc.
+  createdAt?: string; // ISO date string when added, to calculate expiration
 }
 
 export const Projection: React.FC = () => {
-  const { currentNetWorth } = useFinance();
+  const { currentNetWorth, projectionItems: items, projectionSettings, addProjectionItem, updateProjectionItem, deleteProjectionItem, updateProjectionSettings } = useFinance();
   
-  const [annualGrossRate, setAnnualGrossRate] = useState(35.0);
-  const [taxRate, setTaxRate] = useState(17.5); // stopaj
-  const [projectionPeriod, setProjectionPeriod] = useState<number>(365);
-  
-  const [items, setItems] = useState<SimItem[]>([
-    { id: '1', name: 'Maaş', type: 'income', amount: 50000, day: 15 },
-    { id: '2', name: 'Kira', type: 'expense', amount: 20000, day: 15 },
-    { id: '3', name: 'Faturalar', type: 'expense', amount: 7000, day: 14 },
-    { id: '4', name: 'Kredi Kartı (Market vs.)', type: 'expense', amount: 15000, day: 14 },
-  ]);
+  const annualGrossRate = projectionSettings.annualGrossRate;
+  const taxRate = projectionSettings.taxRate;
+  const projectionPeriod = projectionSettings.projectionPeriod;
+
+  const setAnnualGrossRate = (val: number) => updateProjectionSettings({ ...projectionSettings, annualGrossRate: val });
+  const setTaxRate = (val: number) => updateProjectionSettings({ ...projectionSettings, taxRate: val });
+  const setProjectionPeriod = (val: number) => updateProjectionSettings({ ...projectionSettings, projectionPeriod: val });
 
   const [newItem, setNewItem] = useState<Partial<SimItem>>({
-    name: '', type: 'expense', amount: 0, day: 1, isOneTime: false, oneTimeDate: format(new Date(), 'yyyy-MM-dd')
+    name: '', type: 'expense', amount: 0, day: 1, isOneTime: false, oneTimeDate: format(new Date(), 'yyyy-MM-dd'), recurringMonths: 0
   });
 
   const handleAddItem = () => {
     if (newItem.name && newItem.amount && (newItem.day || (newItem.isOneTime && newItem.oneTimeDate))) {
-      setItems([...items, { ...newItem, id: Math.random().toString(36).substr(2, 9) } as SimItem]);
-      setNewItem({ name: '', type: 'expense', amount: 0, day: 1, isOneTime: false, oneTimeDate: format(new Date(), 'yyyy-MM-dd') });
+      addProjectionItem({ 
+        name: newItem.name, 
+        type: newItem.type as 'expense' | 'income', 
+        amount: newItem.amount, 
+        day: newItem.day, 
+        isOneTime: newItem.isOneTime, 
+        oneTimeDate: newItem.oneTimeDate, 
+        recurringMonths: newItem.recurringMonths, 
+        createdAt: format(new Date(), 'yyyy-MM-dd') 
+      });
+      setNewItem({ name: '', type: 'expense', amount: 0, day: 1, isOneTime: false, oneTimeDate: format(new Date(), 'yyyy-MM-dd'), recurringMonths: 0 });
     }
   };
 
-  const handleItemChange = (id: string, field: keyof SimItem, value: string | number) => {
-    setItems(items.map(item => item.id === id ? { ...item, [field]: value } : item));
+  const handleItemChange = (id: string, field: keyof SimItem, value: string | number | boolean) => {
+    const existing = items.find(i => i.id === id);
+    if(existing) {
+        updateProjectionItem(id, { ...existing, [field]: value });
+    }
   };
 
-  const deleteItem = (id: string) => setItems(items.filter(i => i.id !== id));
+  const deleteItem = (id: string) => deleteProjectionItem(id);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', maximumFractionDigits: 0 }).format(amount);
@@ -78,7 +89,17 @@ export const Projection: React.FC = () => {
             if (item.isOneTime && item.oneTimeDate) {
                 return key === item.oneTimeDate;
             }
-            return item.day === dom;
+            if (item.day === dom) {
+                if (item.recurringMonths && item.createdAt) {
+                    const createdDate = parseISO(item.createdAt);
+                    const expirationDate = addMonths(createdDate, item.recurringMonths);
+                    if (isAfter(date, expirationDate)) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+            return false;
        });
        const has = evs.length > 0;
        dateEventsCache.set(key, has);
@@ -100,7 +121,17 @@ export const Projection: React.FC = () => {
             if (item.isOneTime && item.oneTimeDate) {
                 return format(currentSimDate, 'yyyy-MM-dd') === item.oneTimeDate;
             }
-            return item.day === dayOfMonth;
+            if (item.day === dayOfMonth) {
+                if (item.recurringMonths && item.createdAt) {
+                    const createdDate = parseISO(item.createdAt);
+                    const expirationDate = addMonths(createdDate, item.recurringMonths);
+                    if (isAfter(currentSimDate, expirationDate)) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+            return false;
         });
         
         // Önce gelirler eklensin (maaş yattığı gün kredi kartı da ödenebilsin diye)
@@ -388,19 +419,31 @@ export const Projection: React.FC = () => {
                         className={`w-full min-w-0 text-lg font-black border border-transparent hover:border-slate-300 focus:border-emerald-500 bg-transparent hover:bg-white focus:bg-white rounded p-1 focus:outline-none transition-all ${item.type === 'income' ? 'text-emerald-600' : 'text-slate-900'}`}
                       />
                     </div>
-                    <div className="w-full md:w-28 flex flex-col md:flex-row items-center gap-2 mt-2 md:mt-0">
+                    <div className="w-full md:w-auto flex flex-col md:flex-row items-center gap-2 mt-2 md:mt-0 flex-wrap">
                       <select 
                           value={item.isOneTime ? 'once' : 'recurring'} 
                           onChange={e => handleItemChange(item.id, 'isOneTime', e.target.value === 'once')}
-                          className="w-full text-[11px] font-bold border border-slate-200 md:border-transparent md:hover:border-slate-300 focus:border-emerald-500 bg-white md:bg-transparent md:hover:bg-white focus:bg-white rounded p-2 md:p-1.5 focus:outline-none transition-all text-slate-500 uppercase tracking-wider appearance-none"
+                          className="w-full md:w-auto text-[11px] font-bold border border-slate-200 md:border-transparent md:hover:border-slate-300 focus:border-emerald-500 bg-white md:bg-transparent md:hover:bg-white focus:bg-white rounded p-2 md:p-1.5 focus:outline-none transition-all text-slate-500 uppercase tracking-wider appearance-none"
                         >
                           <option value="recurring">Rutin</option>
                           <option value="once">1 Kez</option>
                       </select>
+                      {!item.isOneTime && (
+                        <select 
+                            value={item.recurringMonths || 0} 
+                            onChange={e => handleItemChange(item.id, 'recurringMonths', Number(e.target.value))}
+                            className="w-full md:w-auto text-[11px] font-bold border border-slate-200 md:border-transparent md:hover:border-slate-300 focus:border-emerald-500 bg-emerald-50 md:bg-transparent md:hover:bg-emerald-50 focus:bg-emerald-50 rounded p-2 md:p-1.5 focus:outline-none transition-all text-emerald-700 uppercase tracking-wider appearance-none"
+                          >
+                            <option value={0}>Sürekli</option>
+                            <option value={3}>3 Ay</option>
+                            <option value={6}>6 Ay</option>
+                            <option value={12}>12 Ay</option>
+                        </select>
+                      )}
                       <select 
                           value={item.type} 
                           onChange={e => handleItemChange(item.id, 'type', e.target.value)}
-                          className="w-full text-xs font-bold border border-slate-200 md:border-transparent md:hover:border-slate-300 focus:border-emerald-500 bg-white md:bg-transparent md:hover:bg-white focus:bg-white rounded p-2 md:p-1.5 focus:outline-none transition-all text-slate-600 appearance-none"
+                          className="w-full md:w-auto text-xs font-bold border border-slate-200 md:border-transparent md:hover:border-slate-300 focus:border-emerald-500 bg-white md:bg-transparent md:hover:bg-white focus:bg-white rounded p-2 md:p-1.5 focus:outline-none transition-all text-slate-600 appearance-none"
                         >
                           <option value="expense">Gider (-)</option>
                           <option value="income">Gelir (+)</option>
@@ -424,7 +467,7 @@ export const Projection: React.FC = () => {
             <div className="pt-5 border-t border-slate-100">
               <p className="text-xs font-bold text-slate-400 mb-3 uppercase tracking-wider">Hızlı Akış Ekle</p>
               <div className="flex flex-wrap md:flex-nowrap gap-3 items-end">
-                <div className="w-full md:w-1/4">
+                <div className="w-full md:w-1/5">
                   <label className="text-[10px] font-bold text-slate-500 block mb-1">Kategori / İsim</label>
                   <input 
                     placeholder="Örn: Aidat" 
@@ -433,7 +476,7 @@ export const Projection: React.FC = () => {
                     className="w-full text-sm font-bold border border-slate-200 bg-white rounded-lg p-2.5 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
                   />
                 </div>
-                <div className="w-1/2 md:w-1/6">
+                <div className="w-1/2 md:w-32">
                   <label className="text-[10px] font-bold text-slate-500 block mb-1">Tutar (₺)</label>
                   <input 
                     type="number" 
@@ -442,18 +485,33 @@ export const Projection: React.FC = () => {
                     className="w-full text-sm font-bold border border-slate-200 bg-white rounded-lg p-2.5 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
                   />
                 </div>
-                <div className="w-1/2 md:w-1/6">
+                <div className="w-1/2 md:w-32">
                   <label className="text-[10px] font-bold text-slate-500 block mb-1">Sıklık</label>
                   <select 
                     value={newItem.isOneTime ? 'once' : 'recurring'} 
-                    onChange={e => setNewItem({...newItem, isOneTime: e.target.value === 'once'})}
+                    onChange={e => setNewItem({...newItem, isOneTime: e.target.value === 'once', recurringMonths: 0})}
                     className="w-full text-sm font-bold border border-slate-200 bg-white rounded-lg p-2.5 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 appearance-none"
                   >
                     <option value="recurring">Rutin</option>
                     <option value="once">Tek Seferlik</option>
                   </select>
                 </div>
-                <div className="w-1/2 md:w-1/6">
+                {!newItem.isOneTime && (
+                  <div className="w-1/2 md:w-28">
+                    <label className="text-[10px] font-bold text-slate-500 block mb-1">Süre</label>
+                    <select 
+                      value={newItem.recurringMonths || 0} 
+                      onChange={e => setNewItem({...newItem, recurringMonths: Number(e.target.value)})}
+                      className="w-full text-sm font-bold border border-slate-200 bg-white rounded-lg p-2.5 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 appearance-none"
+                    >
+                      <option value={0}>Sürekli</option>
+                      <option value={3}>3 Ay</option>
+                      <option value={6}>6 Ay</option>
+                      <option value={12}>12 Ay</option>
+                    </select>
+                  </div>
+                )}
+                <div className="w-1/2 md:w-28">
                   <label className="text-[10px] font-bold text-slate-500 block mb-1">Tür</label>
                   <select 
                     value={newItem.type} 
@@ -464,7 +522,7 @@ export const Projection: React.FC = () => {
                     <option value="income">Gelir (+)</option>
                   </select>
                 </div>
-                <div className="w-1/2 md:w-1/5">
+                <div className="w-1/2 md:flex-1">
                   <label className="text-[10px] font-bold text-slate-500 block mb-1">{newItem.isOneTime ? "Tarih" : "Ödeme Günü"}</label>
                   {newItem.isOneTime ? (
                      <input 
