@@ -19,6 +19,11 @@ interface SimItem {
 
 export const Projection: React.FC = () => {
   const { currentNetWorth, projectionItems: items, projectionSettings, addProjectionItem, updateProjectionItem, deleteProjectionItem, updateProjectionSettings } = useFinance();
+  const [isMounted, setIsMounted] = useState(false);
+  
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
   
   const annualGrossRate = projectionSettings.annualGrossRate;
   const taxRate = projectionSettings.taxRate;
@@ -287,9 +292,10 @@ export const Projection: React.FC = () => {
               <p className="text-2xl font-black text-emerald-600">{formatCurrency(summary.finalNetWorth)}</p>
             </div>
 
-            <div className="h-[350px] w-full mt-4">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData} margin={{ top: 10, right: -10, bottom: 0, left: -10 }}>
+            <div className="h-[350px] w-full mt-4 min-w-0 flex-1">
+              {isMounted && (
+                <ResponsiveContainer width="100%" height={350} minWidth={100} minHeight={100}>
+                  <AreaChart data={chartData} margin={{ top: 10, right: -10, bottom: 0, left: -10 }}>
                   <defs>
                     <linearGradient id="colorBakiye" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
@@ -367,6 +373,7 @@ export const Projection: React.FC = () => {
                   />
                 </AreaChart>
               </ResponsiveContainer>
+              )}
             </div>
           </div>
 

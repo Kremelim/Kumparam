@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Receipt, FileText, PieChart, TrendingUp, ScanLine, Wallet, Edit2, Check, LineChart, User, Settings, LogOut, LogIn, Repeat, ShoppingCart } from 'lucide-react';
+import { LayoutDashboard, Receipt, FileText, PieChart, TrendingUp, ScanLine, Wallet, Edit2, Check, LineChart, User, Settings, LogOut, LogIn, Repeat, ShoppingCart, Menu, X } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useFinance } from '../context/FinanceContext';
 import { useAuth } from '../context/AuthContext';
@@ -27,7 +27,12 @@ export const Layout: React.FC = () => {
   const [tempTitle, setTempTitle] = useState(appTitle);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setIsSidebarOpen(false); // Close sidebar on route change
+  }, [location.pathname]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -79,9 +84,20 @@ export const Layout: React.FC = () => {
 
   return (
     <div className="flex h-screen bg-slate-50 text-slate-800 font-sans overflow-hidden">
+      {/* Mobile Overlay */}
+      {isSidebarOpen && (
+        <div 
+          className="md:hidden fixed inset-0 bg-slate-900/50 z-40 backdrop-blur-sm"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
       {/* Side Navigation */}
-      <nav className="w-60 bg-slate-900 text-slate-300 flex flex-col border-r border-slate-800">
-        <div className="p-6 border-b border-slate-800 mb-4 group relative">
+      <nav className={cn(
+        "fixed md:static inset-y-0 left-0 z-50 w-60 bg-slate-900 text-slate-300 flex flex-col border-r border-slate-800 transition-transform duration-300 ease-in-out md:translate-x-0",
+        isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+      )}>
+        <div className="p-6 border-b border-slate-800 mb-4 group relative flex items-center justify-between">
           <div className="flex items-center gap-2 text-white">
             <div className="w-8 h-8 bg-emerald-500 rounded flex items-center justify-center font-bold text-slate-900 shrink-0">
               <Wallet className="w-5 h-5" />
@@ -112,9 +128,12 @@ export const Layout: React.FC = () => {
               </div>
             )}
           </div>
+          <button className="md:hidden text-slate-400 hover:text-white" onClick={() => setIsSidebarOpen(false)}>
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
-        <div className="flex-1 px-4 space-y-1">
+        <div className="flex-1 px-4 space-y-1 overflow-y-auto">
           {navItems.map((item) => (
             <NavLink
               key={item.to}
@@ -134,7 +153,7 @@ export const Layout: React.FC = () => {
           ))}
         </div>
         
-        <div className="p-4 border-t border-slate-800">
+        <div className="p-4 border-t border-slate-800 shrink-0">
           <NavLink to="/scanner" className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-2 px-4 rounded-md text-sm font-semibold flex items-center justify-center gap-2 transition-all">
             <ScanLine className="w-4 h-4" />
             <span>Fatura Tara (AI)</span>
@@ -143,14 +162,20 @@ export const Layout: React.FC = () => {
       </nav>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col h-full overflow-hidden">
+      <main className="flex-1 flex flex-col h-full overflow-hidden min-w-0">
         {/* Header */}
-        <header className="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-4">
-            <h1 className="text-xl font-bold text-slate-900">{getPageTitle()}</h1>
+        <header className="h-16 bg-white border-b border-slate-200 px-4 md:px-6 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3">
+            <button 
+              className="md:hidden p-2 -ml-2 text-slate-600 hover:bg-slate-100 rounded-lg"
+              onClick={() => setIsSidebarOpen(true)}
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            <h1 className="text-lg md:text-xl font-bold text-slate-900 truncate">{getPageTitle()}</h1>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="text-right">
+          <div className="flex items-center gap-3 md:gap-4 shrink-0">
+            <div className="text-right hidden sm:block">
               <p className="text-xs text-slate-500">Son Güncelleme</p>
               <p className="text-sm font-semibold">Bugün</p>
             </div>

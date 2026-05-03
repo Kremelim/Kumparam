@@ -149,28 +149,28 @@ export const Transactions: React.FC = () => {
       <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
         <div className="flex flex-col sm:flex-row items-center justify-between mb-4 gap-4">
           <div className="font-bold text-slate-900 w-full sm:w-auto">İşlem Geçmişi</div>
-          <div className="flex gap-2 w-full sm:w-auto items-center">
+          <div className="flex flex-wrap gap-2 w-full sm:w-auto items-center">
             <button
               onClick={() => handleOpenModal()}
               className="flex items-center px-3 py-1.5 bg-slate-900 text-white rounded text-xs font-semibold hover:bg-slate-800 transition whitespace-nowrap"
             >
               <Plus className="w-3.5 h-3.5 mr-1" /> Yeni
             </button>
-            <div className="relative">
+            <div className="relative flex-1 min-w-[120px]">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
               <input 
                 type="text" 
                 placeholder="Mağaza ara..." 
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="text-xs border border-slate-200 rounded px-8 py-1.5 w-full sm:w-48 focus:outline-none focus:border-emerald-500"
+                className="text-xs border border-slate-200 rounded px-8 py-1.5 w-full focus:outline-none focus:border-emerald-500"
               />
             </div>
             
             <select
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value as any)}
-              className="text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none bg-slate-50 font-medium text-slate-700"
+              className="text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none bg-slate-50 font-medium text-slate-700 w-full sm:w-auto"
             >
               <option value="all">Tüm Tipler</option>
               <option value="cc_unpaid">Ödenmemiş Ekstre</option>
@@ -180,7 +180,7 @@ export const Transactions: React.FC = () => {
             <select
               value={dateFilter}
               onChange={(e) => setDateFilter(e.target.value as any)}
-              className="text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none bg-slate-50 font-medium text-slate-700"
+              className="text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none bg-slate-50 font-medium text-slate-700 w-full sm:w-auto"
             >
               <option value="all">Tüm Zamanlar</option>
               <option value="7days">Son 7 Gün</option>
@@ -191,26 +191,27 @@ export const Transactions: React.FC = () => {
         </div>
 
         {dateFilter === 'custom' && (
-          <div className="flex items-center space-x-2 animate-in fade-in slide-in-from-top-2 mb-4">
+          <div className="flex items-center space-x-2 animate-in fade-in slide-in-from-top-2 mb-4 overflow-x-auto w-full pb-2">
             <input 
               type="date" 
               value={customStartDate}
               onChange={(e) => setCustomStartDate(e.target.value)}
-              className="text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:border-emerald-500"
+              className="text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:border-emerald-500 min-w-[110px]"
             />
             <span className="text-slate-400 text-xs">-</span>
             <input 
               type="date" 
               value={customEndDate}
               onChange={(e) => setCustomEndDate(e.target.value)}
-              className="text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:border-emerald-500"
+              className="text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:border-emerald-500 min-w-[110px]"
             />
           </div>
         )}
 
-        <table className="w-full text-sm text-left">
-          <thead>
-            <tr className="text-[10px] text-slate-400 border-b border-slate-50 uppercase font-bold">
+        <div className="overflow-x-auto w-full">
+          <table className="w-full text-sm text-left min-w-[500px]">
+            <thead>
+              <tr className="text-[10px] text-slate-400 border-b border-slate-50 uppercase font-bold">
               <th className="pb-2">Tarih</th>
               <th className="pb-2">İşlem</th>
               <th className="pb-2 text-right">Tutar</th>
@@ -275,6 +276,7 @@ export const Transactions: React.FC = () => {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {isModalOpen && (

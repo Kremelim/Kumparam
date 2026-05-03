@@ -57,6 +57,7 @@ interface FinanceContextType {
   currentNetWorth: number;
   liquidCash: number;
   unpaidCreditCards: number;
+  unpaidCurrentStatementCC: number;
   totalNemaEarned: number;
   onboardingDone: boolean;
   completeOnboarding: (salary: number, rent: number, billsValue: number) => void;
@@ -181,13 +182,13 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     spent: transactions.filter(t => t.category === b.category && t.type === 'expense').reduce((a, t) => a + t.amount, 0)
   }));
 
-  const { liquidCash, unpaidCreditCards, totalNemaEarned, totalIncome, totalExpenses, currentNetWorth } = useMemo(() => {
+  const { liquidCash, unpaidCreditCards, unpaidCurrentStatementCC, totalNemaEarned, totalIncome, totalExpenses, currentNetWorth } = useMemo(() => {
      const sortedTxs = [...transactions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
      const totalInc = sortedTxs.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
      const totalInv = investments.reduce((sum, inv) => sum + inv.value, 0);
 
      if (sortedTxs.length === 0) {
-       return { liquidCash: 0, unpaidCreditCards: 0, totalNemaEarned: 0, totalIncome: 0, totalExpenses: 0, currentNetWorth: totalInv };
+       return { liquidCash: 0, unpaidCreditCards: 0, unpaidCurrentStatementCC: 0, totalNemaEarned: 0, totalIncome: 0, totalExpenses: 0, currentNetWorth: totalInv };
      }
      
      const startDate = new Date(sortedTxs[0].date);
@@ -224,10 +225,22 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
      
      const totalExp = sortedTxs.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
      
+     let referenceDate = new Date(today.getFullYear(), today.getMonth(), 14);
+     if (today > referenceDate) {
+       referenceDate = new Date(today.getFullYear(), today.getMonth() + 1, 14);
+     }
+     const refString = format(referenceDate, 'yyyy-MM-dd');
+
      const unpaidCC = sortedTxs.filter(t => {
           if (t.type !== 'expense') return false;
           const parsed = parseNotes(t.notes);
           return parsed.isCC && !parsed.isPaid;
+     }).reduce((sum, t) => sum + t.amount, 0);
+
+     const unpaidCurrentStatementCC = sortedTxs.filter(t => {
+          if (t.type !== 'expense') return false;
+          const parsed = parseNotes(t.notes);
+          return parsed.isCC && !parsed.isPaid && parsed.dueDate <= refString;
      }).reduce((sum, t) => sum + t.amount, 0);
      
      const currentCashExp = sortedTxs.filter(t => {
@@ -243,6 +256,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
      return { 
        liquidCash: liqCash, 
        unpaidCreditCards: unpaidCC, 
+       unpaidCurrentStatementCC,
        totalNemaEarned: totalNema,
        totalIncome: totalInc,
        totalExpenses: totalExp,
@@ -388,6 +402,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
        }
        return t;
      });
+
 
      setTransactions(updatedTxs);
 
@@ -759,7 +774,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       receipts, addReceipt, deleteReceipt,
       projectionItems, addProjectionItem, updateProjectionItem, deleteProjectionItem,
       projectionSettings, updateProjectionSettings,
-      totalIncome, totalExpenses, currentNetWorth, liquidCash, unpaidCreditCards, totalNemaEarned,
+      totalIncome, totalExpenses, currentNetWorth, liquidCash, unpaidCreditCards, unpaidCurrentStatementCC, totalNemaEarned,
       onboardingDone, completeOnboarding, skipOnboarding,
       appTitle, setAppTitle, isLoadingData
     }}>

@@ -1,11 +1,17 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useFinance } from '../context/FinanceContext';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid } from 'recharts';
 import { format, isSameMonth, parseISO } from 'date-fns';
 import { tr } from 'date-fns/locale';
 
 export const Dashboard: React.FC = () => {
-  const { netWorthHistory, transactions, bills, currentNetWorth, liquidCash, unpaidCreditCards, totalNemaEarned, payCreditCardStatement } = useFinance();
+  const { netWorthHistory, transactions, bills, currentNetWorth, liquidCash, unpaidCreditCards, unpaidCurrentStatementCC, totalNemaEarned, payCreditCardStatement } = useFinance();
+  const [showPayConfirm, setShowPayConfirm] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+  
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
   
   const previousNetWorth = netWorthHistory[netWorthHistory.length - 2]?.total || 0;
   const netWorthChange = currentNetWorth - previousNetWorth;
@@ -21,9 +27,7 @@ export const Dashboard: React.FC = () => {
   };
 
   const handlePayStatement = () => {
-    if (confirm('Bu ayın son ödemesine kadar olan veya geçmiş tüm ödenmemiş kredi kartı fişleri ve faturaları ödendi olarak işaretlensin mi?')) {
-      payCreditCardStatement();
-    }
+    setShowPayConfirm(true);
   };
 
   return (
@@ -53,15 +57,19 @@ export const Dashboard: React.FC = () => {
             <p className="text-2xl font-bold text-rose-600 mt-1">{formatCurrency(unpaidCreditCards)}</p>
           </div>
           <div className="mt-3 flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-500">Henüz ekstre ödenmemiş</span>
-            {unpaidCreditCards > 0 && (
+            <span className="text-[10px] font-medium text-slate-500 min-w-0 pr-1 truncate">
+              Bu aya ait ekstre: <span className="font-bold text-slate-700">{formatCurrency(unpaidCurrentStatementCC)}</span>
+            </span>
+            {unpaidCurrentStatementCC > 0 ? (
               <button 
                 onClick={handlePayStatement}
-                className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold px-2 py-1 rounded transition-colors"
+                className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold px-2 py-1 rounded transition-colors whitespace-nowrap flex-shrink-0"
                 title="Ayın 14'üne kadar olan tüm ödenmemiş borçları 'Ödendi' olarak işaretler"
               >
                 Ekstre Öde
               </button>
+            ) : (
+              <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded flex-shrink-0">Tümü Ödendi</span>
             )}
           </div>
         </div>
@@ -107,8 +115,8 @@ export const Dashboard: React.FC = () => {
               )}
               {upcomingBills.map(b => (
                 <div key={b.id} className="text-xs flex justify-between items-center text-slate-600 border-b border-slate-50 pb-1 last:border-0 last:pb-0">
-                  <span className="truncate mr-1 font-medium">{b.name}</span>
-                  <span className="font-bold text-slate-900">{formatCurrency(b.amount)}</span>
+                  <span className="truncate mr-2 font-medium flex-1 min-w-0">{b.name}</span>
+                  <span className="font-bold text-slate-900 shrink-0">{formatCurrency(b.amount)}</span>
                 </div>
               ))}
               {overdueBills.length === 0 && upcomingBills.length === 0 && (
@@ -129,9 +137,10 @@ export const Dashboard: React.FC = () => {
               <span className="flex items-center gap-1"><span className="w-3 h-3 bg-rose-400 rounded-sm"></span> Azalış</span>
             </div>
           </div>
-          <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={netWorthHistory} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+          <div className="h-64 w-full min-w-0 flex-1">
+            {isMounted && (
+              <ResponsiveContainer width="100%" height={256} minWidth={100} minHeight={100}>
+                <BarChart data={netWorthHistory} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                 <XAxis 
                   dataKey="month" 
@@ -163,6 +172,7 @@ export const Dashboard: React.FC = () => {
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
+            )}
           </div>
         </div>
 
@@ -174,11 +184,11 @@ export const Dashboard: React.FC = () => {
           <div className="flex-1 space-y-3 overflow-y-auto pr-2">
             {transactions.slice(-5).reverse().map(tx => (
               <div key={tx.id} className="flex justify-between items-center p-3 rounded-lg border border-slate-100 hover:border-slate-200 transition-colors">
-                <div>
-                  <p className="text-sm font-bold text-slate-900">{tx.merchant}</p>
-                  <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wide">{tx.category} • {format(parseISO(tx.date), 'd MMM', { locale: tr })}</p>
+                <div className="flex-1 min-w-0 pr-2">
+                  <p className="text-sm font-bold text-slate-900 truncate">{tx.merchant}</p>
+                  <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wide truncate">{tx.category} • {format(parseISO(tx.date), 'd MMM', { locale: tr })}</p>
                 </div>
-                <p className={`text-sm font-bold ${tx.type === 'income' ? 'text-emerald-600' : 'text-slate-900'}`}>
+                <p className={`text-sm font-bold shrink-0 ${tx.type === 'income' ? 'text-emerald-600' : 'text-slate-900'}`}>
                   {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount)}
                 </p>
               </div>
@@ -189,6 +199,34 @@ export const Dashboard: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {showPayConfirm && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 min-h-screen">
+          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm animate-in zoom-in-95 duration-200">
+            <h3 className="text-lg font-bold text-slate-800 mb-2">Ekstre Ödeme</h3>
+            <p className="text-sm text-slate-600 mb-6 leading-relaxed">
+              Bu aya ait {formatCurrency(unpaidCurrentStatementCC)} tutarındaki ekstre borcunu "Ödendi" olarak işaretleyip Nakit bakiyenizden düşmek istiyor musunuz? İşlem için yeni bir fatura yaratılmaz, harcamalar ödenmiş olarak işaretlenir.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowPayConfirm(false)}
+                className="flex-1 px-4 py-2 text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+              >
+                İptal
+              </button>
+              <button
+                onClick={() => {
+                  payCreditCardStatement();
+                  setShowPayConfirm(false);
+                }}
+                className="flex-1 px-4 py-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors shadow-sm"
+              >
+                Öde
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -172,11 +172,11 @@ export const Bills: React.FC = () => {
                     {getIcon(bill.name, bill.category)}
                   </div>
                   
-                  <div className="flex-1">
-                    <p className={cn("text-sm font-bold", bill.isPaid ? "text-slate-500 line-through" : "text-slate-900")}>
+                  <div className="flex-1 min-w-0 pr-2">
+                    <p className={cn("text-sm font-bold truncate", bill.isPaid ? "text-slate-500 line-through" : "text-slate-900")}>
                       {bill.name}
                     </p>
-                    <p className="text-[10px] text-slate-400">
+                    <p className="text-[10px] text-slate-400 truncate">
                       Son Ödeme: {format(billDate, 'd MMM yyyy', { locale: tr })} &bull; Tekerrür: {getRecurrenceLabel(bill.recurrence)}
                     </p>
                   </div>
