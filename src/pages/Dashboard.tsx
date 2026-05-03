@@ -5,7 +5,7 @@ import { format, isSameMonth, parseISO } from 'date-fns';
 import { tr } from 'date-fns/locale';
 
 export const Dashboard: React.FC = () => {
-  const { netWorthHistory, transactions, bills, currentNetWorth, liquidCash, unpaidCreditCards, totalNemaEarned } = useFinance();
+  const { netWorthHistory, transactions, bills, currentNetWorth, liquidCash, unpaidCreditCards, totalNemaEarned, payCreditCardStatement } = useFinance();
   
   const previousNetWorth = netWorthHistory[netWorthHistory.length - 2]?.total || 0;
   const netWorthChange = currentNetWorth - previousNetWorth;
@@ -18,6 +18,12 @@ export const Dashboard: React.FC = () => {
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', maximumFractionDigits: 0 }).format(amount);
+  };
+
+  const handlePayStatement = () => {
+    if (confirm('Bu ayın son ödemesine kadar olan veya geçmiş tüm ödenmemiş kredi kartı fişleri ve faturaları ödendi olarak işaretlensin mi?')) {
+      payCreditCardStatement();
+    }
   };
 
   return (
@@ -46,8 +52,17 @@ export const Dashboard: React.FC = () => {
             </div>
             <p className="text-2xl font-bold text-rose-600 mt-1">{formatCurrency(unpaidCreditCards)}</p>
           </div>
-          <div className="mt-3 text-xs font-medium">
-            <span className="text-slate-500">Henüz ekstre ödenmemiş</span>
+          <div className="mt-3 flex items-center justify-between">
+            <span className="text-xs font-medium text-slate-500">Henüz ekstre ödenmemiş</span>
+            {unpaidCreditCards > 0 && (
+              <button 
+                onClick={handlePayStatement}
+                className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold px-2 py-1 rounded transition-colors"
+                title="Ayın 14'üne kadar olan tüm ödenmemiş borçları 'Ödendi' olarak işaretler"
+              >
+                Ekstre Öde
+              </button>
+            )}
           </div>
         </div>
 

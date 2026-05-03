@@ -31,6 +31,7 @@ interface FinanceContextType {
   payBill: (id: string, amount: number, date: string) => void;
   undoBillPayment: (billId: string) => void;
   deleteBill: (id: string) => void;
+  payCreditCardStatement: () => void;
   addRegularIncome: (ri: Omit<RegularIncome, 'id'>) => void;
   updateRegularIncome: (id: string, updatedRi: Omit<RegularIncome, 'id'>) => void;
   processRegularIncome: (id: string, amount: number, date: string) => void;
@@ -42,6 +43,9 @@ interface FinanceContextType {
   addInvestment: (i: Omit<Investment, 'id'>) => void;
   updateInvestment: (id: string, updatedInvestment: Omit<Investment, 'id'>) => void;
   deleteInvestment: (id: string) => void;
+  receipts: Receipt[];
+  addReceipt: (r: Omit<Receipt, 'id'>) => void;
+  deleteReceipt: (id: string) => void;
   projectionItems: SimItem[];
   addProjectionItem: (item: Omit<SimItem, 'id'>) => void;
   updateProjectionItem: (id: string, updatedItem: Omit<SimItem, 'id'>) => void;
@@ -80,6 +84,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [regularIncomes, setRegularIncomes] = useState<RegularIncome[]>(() => loadFromStorage('fin_regular_incomes', []));
   const [investments, setInvestments] = useState<Investment[]>(() => loadFromStorage('fin_investments', []));
   const [storedBudgets, setStoredBudgets] = useState<Budget[]>(() => loadFromStorage('fin_budgets', []));
+  const [receipts, setReceipts] = useState<Receipt[]>(() => loadFromStorage('fin_receipts', []));
   const [onboardingDone, setOnboardingDone] = useState<boolean>(() => loadFromStorage('fin_onboarding', false));
   const [appTitle, setAppTitle] = useState<string>(() => loadFromStorage('fin_app_title', 'Kumparam'));
   const [isLoadingData, setIsLoadingData] = useState(false);
@@ -106,6 +111,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => { localStorage.setItem('fin_regular_incomes', JSON.stringify(regularIncomes)); }, [regularIncomes]);
   useEffect(() => { localStorage.setItem('fin_investments', JSON.stringify(investments)); }, [investments]);
   useEffect(() => { localStorage.setItem('fin_budgets', JSON.stringify(storedBudgets)); }, [storedBudgets]);
+  useEffect(() => { localStorage.setItem('fin_receipts', JSON.stringify(receipts)); }, [receipts]);
   useEffect(() => { localStorage.setItem('fin_onboarding', JSON.stringify(onboardingDone)); }, [onboardingDone]);
   useEffect(() => { localStorage.setItem('fin_app_title', JSON.stringify(appTitle)); }, [appTitle]);
   useEffect(() => { localStorage.setItem('fin_proj_items', JSON.stringify(projectionItems)); }, [projectionItems]);
@@ -358,6 +364,53 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
+  const payCreditCardStatement = async () => {
+     const today = new Date();
+     
+     // Find transactions to pay: all CC expenses that are unpaid, and due date is <= today or current period's 14th
+     // Let's just find ALL unpaid CC expenses with a due date <= current month's 14th if today <= 14th
+     // Or actually, let's just pay all unpaid CC expenses up to the current period's 14th
+     let referenceDate = new Date(today.getFullYear(), today.getMonth(), 14);
+     if (today > referenceDate) {
+       // if we are past the 14th, maybe we want to pay up to next month's 14th?
+       // Usually if today is 15th, the next statement isn't due yet, but maybe user wants to pay it.
+       referenceDate = new Date(today.getFullYear(), today.getMonth() + 1, 14);
+     }
+     
+     const txsToUpdate: Transaction[] = [];
+     const updatedTxs = transactions.map(t => {
+       if (t.type === 'expense') {
+         const parsed = parseNotes(t.notes);
+         if (parsed.isCC && !parsed.isPaid) {
+           const dueDate = new Date(parsed.dueDate);
+           dueDate.setHours(0,0,0,0);
+           const ref = new Date(referenceDate);
+           ref.setHours(0,0,0,0);
+           
+           if (dueDate <= ref) {
+             const updated = { ...t, notes: `CC|${parsed.dueDate}|1|${parsed.actualNote}` };
+             txsToUpdate.push(updated);
+             return updated;
+           }
+         }
+       }
+       return t;
+     });
+
+     setTransactions(updatedTxs);
+
+     if (user && txsToUpdate.length > 0) {
+       // In a batch update we might need multiple calls or a stored procedure.
+       // For Supabase we can use multiple updates
+       for (const tx of txsToUpdate) {
+          const { error } = await supabase.from('transactions').update({ notes: tx.notes }).eq('id', tx.id).eq('user_id', user.id);
+          if (error) {
+             console.error("Kredi kartı ekstre ödeme hatası:", error);
+          }
+       }
+     }
+  };
+
   // ------------- BILLS -------------
   const addBill = async (b: Omit<Bill, 'id'>) => {
     const tempId = generateUUID();
@@ -462,6 +515,15 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const { error } = await supabase.from('bills').delete().eq('id', id).eq('user_id', user.id);
       if (error) alert(`Silme hatası (Bills): ${error.message}`);
     }
+  };
+
+  const addReceipt = (r: Omit<Receipt, 'id'>) => {
+    const id = generateUUID();
+    setReceipts(prev => [...prev, { ...r, id }]);
+  };
+
+  const deleteReceipt = (id: string) => {
+    setReceipts(prev => prev.filter(r => r.id !== id));
   };
 
   // ------------- REGULAR INCOMES -------------
@@ -699,11 +761,12 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   return (
     <FinanceContext.Provider value={{
       transactions, bills, regularIncomes, netWorthHistory, investments, budgets,
-      addTransaction, updateTransaction, deleteTransaction, 
+      addTransaction, updateTransaction, deleteTransaction, payCreditCardStatement,
       addBill, updateBill, payBill, undoBillPayment, deleteBill,
       addRegularIncome, updateRegularIncome, processRegularIncome, undoRegularIncomeProcess, deleteRegularIncome,
       addBudget, updateBudget, deleteBudget,
       addInvestment, updateInvestment, deleteInvestment,
+      receipts, addReceipt, deleteReceipt,
       projectionItems, addProjectionItem, updateProjectionItem, deleteProjectionItem,
       projectionSettings, updateProjectionSettings,
       totalIncome, totalExpenses, currentNetWorth, liquidCash, unpaidCreditCards, totalNemaEarned,

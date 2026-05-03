@@ -6,7 +6,7 @@ import { format } from 'date-fns';
 import { Recurrence } from '../types';
 
 export const AiScanner: React.FC = () => {
-  const { addTransaction, addBill } = useFinance();
+  const { addTransaction, addBill, addReceipt } = useFinance();
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [result, setResult] = useState<any>(null);
@@ -72,6 +72,18 @@ export const AiScanner: React.FC = () => {
               isBill: {
                 type: Type.BOOLEAN,
                 description: "Bu belge ödenmesi gereken bir fatura mıdır? (Elektrik, Su, Doğalgaz, İnternet vb.) Fiş ise false."
+              },
+              items: {
+                type: Type.ARRAY,
+                description: "Eğer bu bir fiş ise (fatura değilse), fişte yer alan ürün veya hizmetlerin listesi.",
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    name: { type: Type.STRING, description: "Ürün veya hizmetin adı." },
+                    price: { type: Type.NUMBER, description: "Ürünün fiyatı." }
+                  },
+                  required: ["name", "price"]
+                }
               }
             },
             required: ["merchant", "amount", "date", "category", "isBill"]
@@ -97,6 +109,27 @@ export const AiScanner: React.FC = () => {
 
   const handleApproveTransaction = () => {
     if (result) {
+      if (!result.isBill) {
+        addReceipt({
+          merchant: result.merchant || 'Bilinmeyen Satıcı',
+          date: result.date || format(new Date(), 'yyyy-MM-dd'),
+          totalAmount: result.amount || 0,
+          items: result.items || []
+        });
+      }
+
+      const today = new Date();
+      let defaultDueDate = new Date(today.getFullYear(), today.getMonth(), 14);
+      if (today.getDate() > 14) {
+        defaultDueDate = new Date(today.getFullYear(), today.getMonth() + 1, 14);
+      }
+      
+      const actualNote = result.items && result.items.length > 0 
+                  ? `AI ile tarandı. ${result.items.length} ürün içeriyor.` 
+                  : 'AI ile tarandı';
+                  
+      const ccNotes = `CC|${format(defaultDueDate, 'yyyy-MM-dd')}|0|${actualNote}`;
+
       addTransaction({
         type: 'expense',
         merchant: result.merchant || 'Bilinmeyen Satıcı',
@@ -105,7 +138,7 @@ export const AiScanner: React.FC = () => {
         category: ['Market', 'Kira', 'Faturalar', 'Ulaşım', 'Sağlık', 'Eğitim', 'Diğer'].includes(result.category) 
                   ? result.category 
                   : 'Diğer',
-        notes: 'AI ile tarandı'
+        notes: ccNotes
       });
       setImagePreview(null);
       setResult(null);
@@ -222,6 +255,19 @@ export const AiScanner: React.FC = () => {
                   {result.isBill && (
                     <div className="text-[10px] font-bold text-orange-600 bg-orange-50 p-2 rounded">
                       Bu belge bir fatura olarak algılandı.
+                    </div>
+                  )}
+                  {result.items && result.items.length > 0 && (
+                    <div className="mt-3">
+                      <label className="block text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-wider">Ürünler</label>
+                      <div className="border border-slate-100 rounded-lg overflow-hidden">
+                        {result.items.map((item: any, idx: number) => (
+                          <div key={idx} className="flex justify-between items-center p-2 text-xs border-b border-slate-50 last:border-0 bg-slate-50/50">
+                            <span className="font-medium text-slate-700 truncate mr-2">{item.name}</span>
+                            <span className="font-bold text-slate-900 whitespace-nowrap">{formatCurrency(item.price)}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>

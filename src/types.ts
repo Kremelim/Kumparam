@@ -72,6 +72,20 @@ export interface Budget {
   spent: number;
 }
 
+export interface ReceiptItem {
+  name: string;
+  price: number;
+}
+
+export interface Receipt {
+  id: string;
+  merchant: string;
+  date: string; // ISO string YYYY-MM-DD
+  totalAmount: number;
+  items: ReceiptItem[];
+  linkedTransactionId?: string; // If this receipt is linked to a transaction
+}
+
 export interface SimItem {
   id: string;
   name: string;
