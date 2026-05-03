@@ -105,3 +105,9 @@ export interface ProjectionSettings {
   projectionPeriod: number;
 }
 
+export interface NemaSettings {
+  isEnabled: boolean;
+  annualGrossRate: number;
+  taxRate: number;
+}
+

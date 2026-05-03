@@ -3,10 +3,13 @@ import { useFinance } from '../context/FinanceContext';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid } from 'recharts';
 import { format, isSameMonth, parseISO } from 'date-fns';
 import { tr } from 'date-fns/locale';
+import { NemaSettingsModal } from '../components/NemaSettingsModal';
+import { Settings2 } from 'lucide-react';
 
 export const Dashboard: React.FC = () => {
-  const { netWorthHistory, transactions, bills, currentNetWorth, liquidCash, unpaidCreditCards, unpaidCurrentStatementCC, totalNemaEarned, payCreditCardStatement } = useFinance();
+  const { netWorthHistory, transactions, bills, currentNetWorth, liquidCash, unpaidCreditCards, unpaidCurrentStatementCC, totalNemaEarned, payCreditCardStatement, nemaSettings } = useFinance();
   const [showPayConfirm, setShowPayConfirm] = useState(false);
+  const [showNemaSettings, setShowNemaSettings] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   
   useEffect(() => {
@@ -44,8 +47,16 @@ export const Dashboard: React.FC = () => {
             </div>
             <p className="text-2xl font-bold mt-1 text-emerald-400">{formatCurrency(liquidCash)}</p>
           </div>
-          <div className="mt-3 text-[10px] font-medium text-emerald-400/80">
-            {formatCurrency(totalNemaEarned)} TL Nema dahil
+          <div className="mt-3 flex items-center justify-between">
+            <span className="text-[10px] font-medium text-emerald-400/80">
+              {nemaSettings.isEnabled ? `+${formatCurrency(totalNemaEarned)} TL Nema` : 'Nema hesaplaması kapalı'}
+            </span>
+            <button
+              onClick={() => setShowNemaSettings(true)}
+              className="text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-1 rounded flex items-center gap-1 transition"
+            >
+              <Settings2 className="w-3 h-3" /> Ayarlar
+            </button>
           </div>
         </div>
 
@@ -226,6 +237,10 @@ export const Dashboard: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {showNemaSettings && (
+        <NemaSettingsModal onClose={() => setShowNemaSettings(false)} />
       )}
     </div>
   );

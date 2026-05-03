@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
-import { Transaction, Bill, NetWorthEntry, Investment, Budget, Category, Recurrence, RegularIncome, SimItem, ProjectionSettings } from '../types';
+import { Transaction, Bill, NetWorthEntry, Investment, Budget, Category, Recurrence, RegularIncome, SimItem, ProjectionSettings, NemaSettings, Receipt } from '../types';
 import { addMonths, addQuarters, addYears, format, parseISO } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { useAuth } from './AuthContext';
@@ -52,6 +52,8 @@ interface FinanceContextType {
   deleteProjectionItem: (id: string) => void;
   projectionSettings: ProjectionSettings;
   updateProjectionSettings: (settings: ProjectionSettings) => void;
+  nemaSettings: NemaSettings;
+  updateNemaSettings: (settings: NemaSettings) => void;
   totalIncome: number;
   totalExpenses: number;
   currentNetWorth: number;
@@ -105,6 +107,11 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     taxRate: 17.5,
     projectionPeriod: 365
   }));
+  const [nemaSettings, setNemaSettings] = useState<NemaSettings>(() => loadFromStorage('fin_nema_settings', {
+    isEnabled: true,
+    annualGrossRate: 35.0,
+    taxRate: 17.5
+  }));
 
   // Save to local as backup always
   useEffect(() => { localStorage.setItem('fin_transactions', JSON.stringify(transactions)); }, [transactions]);
@@ -117,6 +124,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => { localStorage.setItem('fin_app_title', JSON.stringify(appTitle)); }, [appTitle]);
   useEffect(() => { localStorage.setItem('fin_proj_items', JSON.stringify(projectionItems)); }, [projectionItems]);
   useEffect(() => { localStorage.setItem('fin_proj_settings', JSON.stringify(projectionSettings)); }, [projectionSettings]);
+  useEffect(() => { localStorage.setItem('fin_nema_settings', JSON.stringify(nemaSettings)); }, [nemaSettings]);
 
   // Load from Supabase on user init
   useEffect(() => {
@@ -198,7 +206,8 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
      
      let totalNema = 0;
      let currentDate = new Date(startDate);
-     const dailyRate = (projectionSettings.annualGrossRate / 100) / 365;
+     const netAnnualRate = nemaSettings.annualGrossRate * (1 - nemaSettings.taxRate / 100);
+     const dailyRate = nemaSettings.isEnabled ? (netAnnualRate / 100) / 365 : 0;
 
      while (currentDate <= today) {
        const txsUpToDate = sortedTxs.filter(t => new Date(t.date) <= currentDate);
@@ -763,6 +772,10 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
+  const updateNemaSettings = (settings: NemaSettings) => {
+    setNemaSettings(settings);
+  };
+
   return (
     <FinanceContext.Provider value={{
       transactions, bills, regularIncomes, netWorthHistory, investments, budgets,
@@ -774,6 +787,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       receipts, addReceipt, deleteReceipt,
       projectionItems, addProjectionItem, updateProjectionItem, deleteProjectionItem,
       projectionSettings, updateProjectionSettings,
+      nemaSettings, updateNemaSettings,
       totalIncome, totalExpenses, currentNetWorth, liquidCash, unpaidCreditCards, unpaidCurrentStatementCC, totalNemaEarned,
       onboardingDone, completeOnboarding, skipOnboarding,
       appTitle, setAppTitle, isLoadingData
