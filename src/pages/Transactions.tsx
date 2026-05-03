@@ -22,29 +22,53 @@ export const Transactions: React.FC = () => {
     category: '',
     merchant: '',
     date: format(new Date(), 'yyyy-MM-dd'),
-    notes: ''
+    notes: '',
+    isCC: false,
+    dueDate: format(new Date(), 'yyyy-MM-dd'),
+    isPaid: false
   });
+
+  const parseNotes = (notes?: string) => {
+    if (!notes) return { isCC: false, dueDate: '', isPaid: false, actualNote: '' };
+    const parts = notes.split('|');
+    if (parts[0] === 'CC' && parts.length >= 4) {
+      return { isCC: true, dueDate: parts[1], isPaid: parts[2] === '1', actualNote: parts.slice(3).join('|') };
+    }
+    return { isCC: false, dueDate: '', isPaid: false, actualNote: notes };
+  };
 
   const handleOpenModal = (tx?: Transaction) => {
     if (tx) {
       setEditingTx(tx);
+      const parsed = parseNotes(tx.notes);
       setFormData({
         type: tx.type,
         amount: tx.amount.toString(),
         category: tx.category,
         merchant: tx.merchant,
         date: tx.date,
-        notes: tx.notes || ''
+        notes: parsed.actualNote,
+        isCC: parsed.isCC,
+        dueDate: parsed.dueDate,
+        isPaid: parsed.isPaid
       });
     } else {
       setEditingTx(null);
+      const today = new Date();
+      let defaultDueDate = new Date(today.getFullYear(), today.getMonth(), 14);
+      if (today.getDate() > 14) {
+        defaultDueDate = new Date(today.getFullYear(), today.getMonth() + 1, 14);
+      }
       setFormData({
         type: 'expense',
         amount: '',
         category: '',
         merchant: '',
-        date: format(new Date(), 'yyyy-MM-dd'),
-        notes: ''
+        date: format(today, 'yyyy-MM-dd'),
+        notes: '',
+        isCC: true,
+        dueDate: format(defaultDueDate, 'yyyy-MM-dd'),
+        isPaid: false
       });
     }
     setIsModalOpen(true);
@@ -60,16 +84,24 @@ export const Transactions: React.FC = () => {
     const amountNum = parseFloat(formData.amount);
     if (isNaN(amountNum) || amountNum <= 0) return;
 
+    let finalNotes = formData.notes;
+    if (formData.type === 'expense' && formData.isCC) {
+      finalNotes = `CC|${formData.dueDate}|${formData.isPaid ? '1' : '0'}|${formData.notes}`;
+    }
+
+    const payload = {
+      type: formData.type,
+      amount: amountNum,
+      category: formData.category as any,
+      merchant: formData.merchant,
+      date: formData.date,
+      notes: finalNotes
+    };
+
     if (editingTx) {
-      updateTransaction(editingTx.id, {
-        ...formData,
-        amount: amountNum
-      });
+      updateTransaction(editingTx.id, payload);
     } else {
-      addTransaction({
-        ...formData,
-        amount: amountNum
-      });
+      addTransaction(payload);
     }
     handleCloseModal();
   };
@@ -181,8 +213,15 @@ export const Transactions: React.FC = () => {
                     {format(parseISO(tx.date), 'd MMM yyyy', { locale: tr })}
                   </td>
                   <td className="py-2.5">
-                    <p className="font-semibold text-slate-900">{tx.merchant}</p>
-                    <p className="text-[10px] text-slate-400">{tx.category}</p>
+                    <p className="font-semibold text-slate-900 flex items-center gap-2">
+                       {tx.merchant}
+                       {parseNotes(tx.notes).isCC && (
+                         <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase ${parseNotes(tx.notes).isPaid ? 'bg-emerald-100 text-emerald-700' : 'bg-orange-100 text-orange-700'}`}>
+                           {parseNotes(tx.notes).isPaid ? 'ÖDENDİ' : `K.KARTI (${format(parseISO(parseNotes(tx.notes).dueDate), 'd MMM', { locale: tr })})`}
+                         </span>
+                       )}
+                    </p>
+                    <p className="text-[10px] text-slate-400">{tx.category} {parseNotes(tx.notes).actualNote && ` • ${parseNotes(tx.notes).actualNote}`}</p>
                   </td>
                   <td className={`py-2.5 text-right font-bold ${tx.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
                     {tx.type === 'income' ? '+ ' : '- '}{formatCurrency(tx.amount)}
@@ -300,6 +339,55 @@ export const Transactions: React.FC = () => {
                   value={formData.date}
                   onChange={(e) => setFormData({ ...formData, date: e.target.value })}
                   className="w-full text-sm border border-slate-200 rounded p-2 focus:outline-none focus:border-slate-400"
+                />
+              </div>
+
+              {formData.type === 'expense' && (
+                <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 flex flex-col gap-3">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.isCC}
+                      onChange={(e) => setFormData({ ...formData, isCC: e.target.checked })}
+                      className="accent-slate-900 rounded"
+                    />
+                    <span className="text-sm font-bold text-slate-700">Kredi Kartı ile ödendi</span>
+                  </label>
+                  
+                  {formData.isCC && (
+                    <div className="flex gap-4">
+                      <div className="flex-1">
+                        <label className="block text-xs font-bold text-slate-500 mb-1">Son Ödeme Tarihi</label>
+                        <input 
+                          type="date" 
+                          required={formData.isCC}
+                          value={formData.dueDate}
+                          onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+                          className="w-full text-sm border border-slate-200 rounded p-2 focus:outline-none focus:border-slate-400"
+                        />
+                      </div>
+                      <label className="flex flex-1 items-center gap-2 cursor-pointer mt-5">
+                        <input
+                          type="checkbox"
+                          checked={formData.isPaid}
+                          onChange={(e) => setFormData({ ...formData, isPaid: e.target.checked })}
+                          className="accent-slate-900 rounded"
+                        />
+                        <span className="text-sm font-medium text-slate-700">Ekstre Ödendi</span>
+                      </label>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">Açıklama / Ürün Sepeti (İsteğe bağlı)</label>
+                <input 
+                  type="text" 
+                  value={formData.notes}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  className="w-full text-sm border border-slate-200 rounded p-2 focus:outline-none focus:border-slate-400"
+                  placeholder="örn: Market sepetindeki ürünler..."
                 />
               </div>
 

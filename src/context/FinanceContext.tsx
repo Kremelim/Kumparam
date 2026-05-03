@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { Transaction, Bill, NetWorthEntry, Investment, Budget, Category, Recurrence, RegularIncome, SimItem, ProjectionSettings } from '../types';
 import { addMonths, addQuarters, addYears, format, parseISO } from 'date-fns';
 import { tr } from 'date-fns/locale';
@@ -51,6 +51,9 @@ interface FinanceContextType {
   totalIncome: number;
   totalExpenses: number;
   currentNetWorth: number;
+  liquidCash: number;
+  unpaidCreditCards: number;
+  totalNemaEarned: number;
   onboardingDone: boolean;
   completeOnboarding: (salary: number, rent: number, billsValue: number) => void;
   skipOnboarding: () => void;
@@ -80,6 +83,15 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [onboardingDone, setOnboardingDone] = useState<boolean>(() => loadFromStorage('fin_onboarding', false));
   const [appTitle, setAppTitle] = useState<string>(() => loadFromStorage('fin_app_title', 'Kumparam'));
   const [isLoadingData, setIsLoadingData] = useState(false);
+  
+  const parseNotes = (notes?: string) => {
+    if (!notes) return { isCC: false, dueDate: '', isPaid: false, actualNote: '' };
+    const parts = notes.split('|');
+    if (parts[0] === 'CC' && parts.length >= 4) {
+      return { isCC: true, dueDate: parts[1], isPaid: parts[2] === '1', actualNote: parts.slice(3).join('|') };
+    }
+    return { isCC: false, dueDate: '', isPaid: false, actualNote: notes };
+  };
   
   const [projectionItems, setProjectionItems] = useState<SimItem[]>(() => loadFromStorage('fin_proj_items', []));
   const [projectionSettings, setProjectionSettings] = useState<ProjectionSettings>(() => loadFromStorage('fin_proj_settings', {
@@ -163,14 +175,79 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     spent: transactions.filter(t => t.category === b.category && t.type === 'expense').reduce((a, t) => a + t.amount, 0)
   }));
 
-  const totalIncome = transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
-  const totalExpenses = transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
-  const totalInvestments = investments.reduce((sum, inv) => sum + inv.value, 0);
-  const currentNetWorth = (totalIncome - totalExpenses) + totalInvestments;
+  const { liquidCash, unpaidCreditCards, totalNemaEarned, totalIncome, totalExpenses, currentNetWorth } = useMemo(() => {
+     const sortedTxs = [...transactions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+     const totalInc = sortedTxs.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
+     const totalInv = investments.reduce((sum, inv) => sum + inv.value, 0);
+
+     if (sortedTxs.length === 0) {
+       return { liquidCash: 0, unpaidCreditCards: 0, totalNemaEarned: 0, totalIncome: 0, totalExpenses: 0, currentNetWorth: totalInv };
+     }
+     
+     const startDate = new Date(sortedTxs[0].date);
+     startDate.setHours(0, 0, 0, 0);
+     const today = new Date();
+     today.setHours(0, 0, 0, 0);
+     
+     let totalNema = 0;
+     let currentDate = new Date(startDate);
+     const dailyRate = (projectionSettings.annualGrossRate / 100) / 365;
+
+     while (currentDate <= today) {
+       const txsUpToDate = sortedTxs.filter(t => new Date(t.date) <= currentDate);
+       const incomeUpToDate = txsUpToDate.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
+       
+       const cashExpensesUpToDate = txsUpToDate.filter(t => {
+          if (t.type !== 'expense') return false;
+          const parsed = parseNotes(t.notes);
+          if (parsed.isCC) {
+            const dueDate = new Date(parsed.dueDate);
+            dueDate.setHours(0,0,0,0);
+            return parsed.isPaid && dueDate <= currentDate;
+          }
+          return true;
+       }).reduce((sum, t) => sum + t.amount, 0);
+
+       const dailyLiquidCash = incomeUpToDate - cashExpensesUpToDate + totalNema;
+       if (dailyLiquidCash > 0) {
+         totalNema += (dailyLiquidCash * dailyRate);
+       }
+       
+       currentDate.setDate(currentDate.getDate() + 1);
+     }
+     
+     const totalExp = sortedTxs.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+     
+     const unpaidCC = sortedTxs.filter(t => {
+          if (t.type !== 'expense') return false;
+          const parsed = parseNotes(t.notes);
+          return parsed.isCC && !parsed.isPaid;
+     }).reduce((sum, t) => sum + t.amount, 0);
+     
+     const currentCashExp = sortedTxs.filter(t => {
+          if (t.type !== 'expense') return false;
+          const parsed = parseNotes(t.notes);
+          if (parsed.isCC) return parsed.isPaid;
+          return true;
+     }).reduce((sum, t) => sum + t.amount, 0);
+     
+     const liqCash = totalInc - currentCashExp + totalNema;
+     const netWorth = totalInc + totalNema - totalExp + totalInv;
+
+     return { 
+       liquidCash: liqCash, 
+       unpaidCreditCards: unpaidCC, 
+       totalNemaEarned: totalNema,
+       totalIncome: totalInc,
+       totalExpenses: totalExp,
+       currentNetWorth: netWorth
+     };
+  }, [transactions, investments, projectionSettings.annualGrossRate]);
 
   const [netWorthHistory, setNetWorthHistory] = useState<NetWorthEntry[]>([]);
   
   useEffect(() => {
+    const totalInvestments = investments.reduce((sum, inv) => sum + inv.value, 0);
     if (transactions.length === 0) {
       setNetWorthHistory([{
         id: 'nw-current',
@@ -311,13 +388,21 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     let tempTxId = generateUUID();
     
+    // Determine credit card default values
+    const today = new Date();
+    let defaultDueDate = new Date(today.getFullYear(), today.getMonth(), 14);
+    if (today.getDate() > 14) {
+      defaultDueDate = new Date(today.getFullYear(), today.getMonth() + 1, 14);
+    }
+    const ccNotes = `CC|${format(defaultDueDate, 'yyyy-MM-dd')}|0|Fatura Ödemesi`;
+    
     // Optimiztic UI
     setBills(prev => prev.map(b => b.id === id ? { ...b, isPaid: true, lastPaidDate: new Date().toISOString(), linkedTransactionId: tempTxId } : b));
-    setTransactions(prev => [...prev, { id: tempTxId, type: 'expense', amount, category: billToPay.category as Category, merchant: billToPay.name, date, notes: 'Fatura Ödemesi' }]);
+    setTransactions(prev => [...prev, { id: tempTxId, type: 'expense', amount, category: billToPay.category as Category, merchant: billToPay.name, date, notes: ccNotes }]);
 
     if (user) {
       const { data: insertedTx } = await supabase.from('transactions')
-        .insert({ id: tempTxId, type: 'expense', amount, category: billToPay.category, merchant: billToPay.name, date, notes: 'Fatura Ödemesi', user_id: user.id })
+        .insert({ id: tempTxId, type: 'expense', amount, category: billToPay.category, merchant: billToPay.name, date, notes: ccNotes, user_id: user.id })
         .select().single();
       
       const realTxId = insertedTx ? insertedTx.id : tempTxId;
@@ -621,7 +706,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       addInvestment, updateInvestment, deleteInvestment,
       projectionItems, addProjectionItem, updateProjectionItem, deleteProjectionItem,
       projectionSettings, updateProjectionSettings,
-      totalIncome, totalExpenses, currentNetWorth,
+      totalIncome, totalExpenses, currentNetWorth, liquidCash, unpaidCreditCards, totalNemaEarned,
       onboardingDone, completeOnboarding, skipOnboarding,
       appTitle, setAppTitle, isLoadingData
     }}>

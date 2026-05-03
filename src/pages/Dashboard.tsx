@@ -5,7 +5,7 @@ import { format, isSameMonth, parseISO } from 'date-fns';
 import { tr } from 'date-fns/locale';
 
 export const Dashboard: React.FC = () => {
-  const { netWorthHistory, transactions, bills, currentNetWorth, investments } = useFinance();
+  const { netWorthHistory, transactions, bills, currentNetWorth, liquidCash, unpaidCreditCards, totalNemaEarned } = useFinance();
   
   const previousNetWorth = netWorthHistory[netWorthHistory.length - 2]?.total || 0;
   const netWorthChange = currentNetWorth - previousNetWorth;
@@ -24,12 +24,37 @@ export const Dashboard: React.FC = () => {
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 text-slate-800">
       
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        
+        <div className="bg-slate-900 p-5 rounded-xl shadow-sm border border-slate-800 flex flex-col justify-between text-white">
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Mevcut Nakit</p>
+              <span className="text-[10px] text-slate-300 font-medium bg-slate-800 px-1.5 py-0.5 rounded cursor-help" title="Bankadaki reel paranız (Kredi kartı borçları henüz düşülmedi)">Nedir?</span>
+            </div>
+            <p className="text-2xl font-bold mt-1 text-emerald-400">{formatCurrency(liquidCash)}</p>
+          </div>
+          <div className="mt-3 text-[10px] font-medium text-emerald-400/80">
+            {formatCurrency(totalNemaEarned)} TL Nema dahil
+          </div>
+        </div>
+
+        <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">K.Kartı Borcu</p>
+            </div>
+            <p className="text-2xl font-bold text-rose-600 mt-1">{formatCurrency(unpaidCreditCards)}</p>
+          </div>
+          <div className="mt-3 text-xs font-medium">
+            <span className="text-slate-500">Henüz ekstre ödenmemiş</span>
+          </div>
+        </div>
+
         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-1">
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Toplam Net Varlık</p>
-              <span className="text-[10px] text-slate-400 font-medium bg-slate-100 px-1.5 py-0.5 rounded cursor-help" title="Nakit Bakiye + Toplam Yatırımlar">Nedir?</span>
             </div>
             <p className="text-2xl font-bold text-slate-900 mt-1">{formatCurrency(currentNetWorth)}</p>
           </div>
@@ -44,18 +69,14 @@ export const Dashboard: React.FC = () => {
 
         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
           <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Bu Ayki Gelir</p>
-            <p className="text-2xl font-bold text-emerald-600 mt-1">{formatCurrency(currentMonthIncome)}</p>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Bu Ay</p>
+            <div className="mt-2 text-sm font-bold flex justify-between">
+              <span className="text-emerald-600">+{formatCurrency(currentMonthIncome)}</span>
+            </div>
+            <div className="mt-1 text-sm font-bold flex justify-between">
+              <span className="text-rose-600">-{formatCurrency(currentMonthExpenses)}</span>
+            </div>
           </div>
-          <p className="text-xs text-slate-400 font-medium mt-3">Sadece cari ayın verileri</p>
-        </div>
-
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
-          <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Bu Ayki Gider</p>
-            <p className="text-2xl font-bold text-rose-600 mt-1">{formatCurrency(currentMonthExpenses)}</p>
-          </div>
-          <p className="text-xs text-slate-400 font-medium mt-3">Sadece cari ayın verileri</p>
         </div>
 
         <div className="bg-white p-5 rounded-xl shadow-sm border border-orange-100 flex flex-col justify-between relative overflow-hidden">
