@@ -367,27 +367,19 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const payCreditCardStatement = async () => {
      const today = new Date();
      
-     // Find transactions to pay: all CC expenses that are unpaid, and due date is <= today or current period's 14th
-     // Let's just find ALL unpaid CC expenses with a due date <= current month's 14th if today <= 14th
-     // Or actually, let's just pay all unpaid CC expenses up to the current period's 14th
      let referenceDate = new Date(today.getFullYear(), today.getMonth(), 14);
      if (today > referenceDate) {
-       // if we are past the 14th, maybe we want to pay up to next month's 14th?
-       // Usually if today is 15th, the next statement isn't due yet, but maybe user wants to pay it.
        referenceDate = new Date(today.getFullYear(), today.getMonth() + 1, 14);
      }
+     
+     const refString = format(referenceDate, 'yyyy-MM-dd');
      
      const txsToUpdate: Transaction[] = [];
      const updatedTxs = transactions.map(t => {
        if (t.type === 'expense') {
          const parsed = parseNotes(t.notes);
          if (parsed.isCC && !parsed.isPaid) {
-           const dueDate = new Date(parsed.dueDate);
-           dueDate.setHours(0,0,0,0);
-           const ref = new Date(referenceDate);
-           ref.setHours(0,0,0,0);
-           
-           if (dueDate <= ref) {
+           if (parsed.dueDate <= refString) {
              const updated = { ...t, notes: `CC|${parsed.dueDate}|1|${parsed.actualNote}` };
              txsToUpdate.push(updated);
              return updated;
@@ -400,8 +392,6 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
      setTransactions(updatedTxs);
 
      if (user && txsToUpdate.length > 0) {
-       // In a batch update we might need multiple calls or a stored procedure.
-       // For Supabase we can use multiple updates
        for (const tx of txsToUpdate) {
           const { error } = await supabase.from('transactions').update({ notes: tx.notes }).eq('id', tx.id).eq('user_id', user.id);
           if (error) {

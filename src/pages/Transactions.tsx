@@ -9,6 +9,7 @@ export const Transactions: React.FC = () => {
   const { transactions, addTransaction, updateTransaction, deleteTransaction } = useFinance();
   const [searchTerm, setSearchTerm] = useState('');
   const [dateFilter, setDateFilter] = useState<'all' | '7days' | '30days' | 'custom'>('all');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'cc_unpaid' | 'cc_paid'>('all');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
 
@@ -121,6 +122,13 @@ export const Transactions: React.FC = () => {
                           t.category.toLowerCase().includes(searchTerm.toLowerCase());
     
     if (!matchMerchant) return false;
+    
+    const parsed = parseNotes(t.notes);
+    if (typeFilter === 'cc_unpaid') {
+      if (!parsed.isCC || parsed.isPaid) return false;
+    } else if (typeFilter === 'cc_paid') {
+      if (!parsed.isCC || !parsed.isPaid) return false;
+    }
 
     const tDate = parseISO(t.date);
     const today = new Date();
@@ -159,6 +167,16 @@ export const Transactions: React.FC = () => {
               />
             </div>
             
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value as any)}
+              className="text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none bg-slate-50 font-medium text-slate-700"
+            >
+              <option value="all">Tüm Tipler</option>
+              <option value="cc_unpaid">Ödenmemiş Ekstre</option>
+              <option value="cc_paid">Ödenmiş Ekstre</option>
+            </select>
+
             <select
               value={dateFilter}
               onChange={(e) => setDateFilter(e.target.value as any)}
