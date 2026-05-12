@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Receipt, FileText, PieChart, TrendingUp, ScanLine, Wallet, Edit2, Check, LineChart, User, Settings, LogOut, LogIn, Repeat, ShoppingCart, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Receipt, FileText, PieChart, TrendingUp, ScanLine, Wallet, Edit2, Check, LineChart, User, Settings, LogOut, LogIn, Repeat, ShoppingCart, Menu, X, Share2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useFinance } from '../context/FinanceContext';
 import { useAuth } from '../context/AuthContext';
@@ -20,7 +20,7 @@ const navItems = [
 
 export const Layout: React.FC = () => {
   const location = useLocation();
-  const { appTitle, setAppTitle } = useFinance();
+  const { appTitle, setAppTitle, isSharedView } = useFinance();
   const { user, isLoading } = useAuth();
   
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -57,6 +57,16 @@ export const Layout: React.FC = () => {
   const handleLoginClick = () => {
     setIsProfileMenuOpen(false);
     setIsAuthModalOpen(true);
+  };
+
+  const handleShare = () => {
+    if (user?.id) {
+      const shareUrl = `${window.location.origin}${window.location.pathname}?share=${user.id}`;
+      navigator.clipboard.writeText(shareUrl)
+        .then(() => alert('Paylaşma linki panoya kopyalandı:\n' + shareUrl))
+        .catch(() => alert('Link kopyalanamadı, lütfen manuel kopyalayın: ' + shareUrl));
+      setIsProfileMenuOpen(false);
+    }
   };
 
   const getPageTitle = () => {
@@ -172,7 +182,14 @@ export const Layout: React.FC = () => {
             >
               <Menu className="w-5 h-5" />
             </button>
-            <h1 className="text-lg md:text-xl font-bold text-slate-900 truncate">{getPageTitle()}</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg md:text-xl font-bold text-slate-900 truncate">{getPageTitle()}</h1>
+              {isSharedView && (
+                <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-700">
+                  Görüntüleme Modu
+                </span>
+              )}
+            </div>
           </div>
           <div className="flex items-center gap-3 md:gap-4 shrink-0">
             <div className="text-right hidden sm:block">
@@ -208,6 +225,9 @@ export const Layout: React.FC = () => {
                       </button>
                       <button className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-emerald-600 flex items-center gap-2 transition-colors">
                         <Settings className="w-4 h-4" /> Ayarlar
+                      </button>
+                      <button onClick={handleShare} className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-emerald-600 flex items-center gap-2 transition-colors">
+                        <Share2 className="w-4 h-4" /> Herkese Açık Paylaş
                       </button>
                       <div className="h-px bg-slate-100 my-1"></div>
                       <button onClick={handleLogout} className="w-full text-left px-4 py-2 text-sm text-rose-600 hover:bg-rose-50 flex items-center gap-2 transition-colors">

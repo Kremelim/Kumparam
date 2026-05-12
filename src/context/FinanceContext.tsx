@@ -67,6 +67,7 @@ interface FinanceContextType {
   appTitle: string;
   setAppTitle: (title: string) => void;
   isLoadingData: boolean;
+  isSharedView: boolean;
 }
 
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
@@ -92,6 +93,11 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [appTitle, setAppTitle] = useState<string>(() => loadFromStorage('fin_app_title', 'Kumparam'));
   const [isLoadingData, setIsLoadingData] = useState(false);
   
+  const searchParams = new URLSearchParams(window.location.search);
+  const shareId = searchParams.get('share');
+  const isSharedView = !!(shareId && shareId !== user?.id);
+  const targetUserId = shareId || user?.id;
+
   const parseNotes = (notes?: string) => {
     if (!notes) return { isCC: false, dueDate: '', isPaid: false, actualNote: '' };
     const parts = notes.split('|');
@@ -114,32 +120,74 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }));
 
   // Save to local as backup always
-  useEffect(() => { localStorage.setItem('fin_transactions', JSON.stringify(transactions)); }, [transactions]);
-  useEffect(() => { localStorage.setItem('fin_bills', JSON.stringify(bills)); }, [bills]);
-  useEffect(() => { localStorage.setItem('fin_regular_incomes', JSON.stringify(regularIncomes)); }, [regularIncomes]);
-  useEffect(() => { localStorage.setItem('fin_investments', JSON.stringify(investments)); }, [investments]);
-  useEffect(() => { localStorage.setItem('fin_budgets', JSON.stringify(storedBudgets)); }, [storedBudgets]);
-  useEffect(() => { localStorage.setItem('fin_receipts', JSON.stringify(receipts)); }, [receipts]);
-  useEffect(() => { localStorage.setItem('fin_onboarding', JSON.stringify(onboardingDone)); }, [onboardingDone]);
-  useEffect(() => { localStorage.setItem('fin_app_title', JSON.stringify(appTitle)); }, [appTitle]);
-  useEffect(() => { localStorage.setItem('fin_proj_items', JSON.stringify(projectionItems)); }, [projectionItems]);
-  useEffect(() => { localStorage.setItem('fin_proj_settings', JSON.stringify(projectionSettings)); }, [projectionSettings]);
-  useEffect(() => { localStorage.setItem('fin_nema_settings', JSON.stringify(nemaSettings)); }, [nemaSettings]);
+  useEffect(() => { 
+    if (user) localStorage.setItem(`fin_transactions_${user.id}`, JSON.stringify(transactions)); 
+  }, [transactions, user]);
+  useEffect(() => { 
+    if (user) localStorage.setItem(`fin_bills_${user.id}`, JSON.stringify(bills)); 
+  }, [bills, user]);
+  useEffect(() => { 
+    if (user) localStorage.setItem(`fin_regular_incomes_${user.id}`, JSON.stringify(regularIncomes)); 
+  }, [regularIncomes, user]);
+  useEffect(() => { 
+    if (user) localStorage.setItem(`fin_investments_${user.id}`, JSON.stringify(investments)); 
+  }, [investments, user]);
+  useEffect(() => { 
+    if (user) localStorage.setItem(`fin_budgets_${user.id}`, JSON.stringify(storedBudgets)); 
+  }, [storedBudgets, user]);
+  useEffect(() => { 
+    if (user) localStorage.setItem(`fin_receipts_${user.id}`, JSON.stringify(receipts)); 
+  }, [receipts, user]);
+  useEffect(() => { 
+    if (user) localStorage.setItem(`fin_onboarding_${user.id}`, JSON.stringify(onboardingDone)); 
+  }, [onboardingDone, user]);
+  useEffect(() => { 
+    if (user) localStorage.setItem(`fin_app_title_${user.id}`, JSON.stringify(appTitle)); 
+  }, [appTitle, user]);
+  useEffect(() => { 
+    if (user) localStorage.setItem(`fin_proj_items_${user.id}`, JSON.stringify(projectionItems)); 
+  }, [projectionItems, user]);
+  useEffect(() => { 
+    if (user) localStorage.setItem(`fin_proj_settings_${user.id}`, JSON.stringify(projectionSettings)); 
+  }, [projectionSettings, user]);
+  useEffect(() => { 
+    if (user) localStorage.setItem(`fin_nema_settings_${user.id}`, JSON.stringify(nemaSettings)); 
+  }, [nemaSettings, user]);
 
   // Load from Supabase on user init
   useEffect(() => {
     const fetchData = async () => {
-      if (!user) return;
+      if (!targetUserId) {
+        setTransactions([]);
+        setBills([]);
+        setRegularIncomes([]);
+        setInvestments([]);
+        setStoredBudgets([]);
+        setProjectionItems([]);
+        setReceipts([]);
+        return;
+      }
       setIsLoadingData(true);
+      
+      // Load local-only state isolated by targetUserId
+      setReceipts(loadFromStorage(`fin_receipts_${targetUserId}`, []));
+      setAppTitle(loadFromStorage(`fin_app_title_${targetUserId}`, 'Kumparam'));
+      setOnboardingDone(loadFromStorage(`fin_onboarding_${targetUserId}`, false));
+      setNemaSettings(loadFromStorage(`fin_nema_settings_${targetUserId}`, {
+        isEnabled: true,
+        annualGrossRate: 35.0,
+        taxRate: 17.5
+      }));
+      
       try {
         const [txRes, billsRes, riRes, invRes, budgetsRes, projItemsRes, projSettingsRes] = await Promise.all([
-          supabase.from('transactions').select('*').eq('user_id', user.id),
-          supabase.from('bills').select('*').eq('user_id', user.id),
-          supabase.from('regular_incomes').select('*').eq('user_id', user.id),
-          supabase.from('investments').select('*').eq('user_id', user.id),
-          supabase.from('budgets').select('*').eq('user_id', user.id),
-          supabase.from('projection_items').select('*').eq('user_id', user.id),
-          supabase.from('projection_settings').select('*').eq('user_id', user.id).maybeSingle()
+          supabase.from('transactions').select('*').eq('user_id', targetUserId),
+          supabase.from('bills').select('*').eq('user_id', targetUserId),
+          supabase.from('regular_incomes').select('*').eq('user_id', targetUserId),
+          supabase.from('investments').select('*').eq('user_id', targetUserId),
+          supabase.from('budgets').select('*').eq('user_id', targetUserId),
+          supabase.from('projection_items').select('*').eq('user_id', targetUserId),
+          supabase.from('projection_settings').select('*').eq('user_id', targetUserId).maybeSingle()
         ]);
 
         if (txRes.data) setTransactions(txRes.data);
@@ -208,6 +256,8 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
      let currentDate = new Date(startDate);
      const netAnnualRate = nemaSettings.annualGrossRate * (1 - nemaSettings.taxRate / 100);
      const dailyRate = nemaSettings.isEnabled ? (netAnnualRate / 100) / 365 : 0;
+     const parsedNemaStartDate = nemaSettings.startDate ? new Date(nemaSettings.startDate) : null;
+     if (parsedNemaStartDate) parsedNemaStartDate.setHours(0, 0, 0, 0);
 
      while (currentDate <= today) {
        const txsUpToDate = sortedTxs.filter(t => new Date(t.date) <= currentDate);
@@ -225,7 +275,10 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
        }).reduce((sum, t) => sum + t.amount, 0);
 
        const dailyLiquidCash = incomeUpToDate - cashExpensesUpToDate + totalNema;
-       if (dailyLiquidCash > 0) {
+       
+       const isNemaActive = !parsedNemaStartDate || currentDate >= parsedNemaStartDate;
+       
+       if (dailyLiquidCash > 0 && isNemaActive) {
          totalNema += (dailyLiquidCash * dailyRate);
        }
        
@@ -351,6 +404,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // ------------- TRANSACTIONS -------------
   const addTransaction = async (t: Omit<Transaction, 'id'>) => {
+    if (isSharedView) return;
     const tempId = generateUUID();
     setTransactions(prev => [...prev, { ...t, id: tempId }]);
     
@@ -790,7 +844,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       nemaSettings, updateNemaSettings,
       totalIncome, totalExpenses, currentNetWorth, liquidCash, unpaidCreditCards, unpaidCurrentStatementCC, totalNemaEarned,
       onboardingDone, completeOnboarding, skipOnboarding,
-      appTitle, setAppTitle, isLoadingData
+      appTitle, setAppTitle, isLoadingData, isSharedView
     }}>
       {children}
     </FinanceContext.Provider>

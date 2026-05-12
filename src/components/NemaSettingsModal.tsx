@@ -12,6 +12,7 @@ export const NemaSettingsModal: React.FC<NemaSettingsModalProps> = ({ onClose })
   const [isEnabled, setIsEnabled] = useState(nemaSettings.isEnabled);
   const [annualGrossRate, setAnnualGrossRate] = useState(nemaSettings.annualGrossRate);
   const [taxRate, setTaxRate] = useState(nemaSettings.taxRate);
+  const [startDate, setStartDate] = useState(nemaSettings.startDate || '');
 
   const netAnnualRate = annualGrossRate * (1 - taxRate / 100);
   const dailyRate = (netAnnualRate / 100) / 365;
@@ -22,7 +23,8 @@ export const NemaSettingsModal: React.FC<NemaSettingsModalProps> = ({ onClose })
     updateNemaSettings({
       isEnabled,
       annualGrossRate,
-      taxRate
+      taxRate,
+      startDate: startDate || undefined
     });
     onClose();
   };
@@ -109,6 +111,21 @@ export const NemaSettingsModal: React.FC<NemaSettingsModalProps> = ({ onClose })
                   </div>
                 </div>
               </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                Başlangıç Tarihi
+              </label>
+              <div className="relative border border-slate-200 rounded-lg overflow-hidden focus-within:border-emerald-500 focus-within:ring-1 focus-within:ring-emerald-500 transition-all bg-white">
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full px-4 py-2.5 outline-none font-semibold text-slate-800"
+                />
+              </div>
+              <p className="text-[10px] text-slate-400 mt-1">Eğer boş bırakılırsa hesabın oluşturulduğu tarihten veya ilk işlemden itibaren hesaplanır.</p>
             </div>
 
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mt-6">

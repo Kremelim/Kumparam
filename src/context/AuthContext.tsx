@@ -26,9 +26,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
+      if (event === 'SIGNED_OUT') {
+        Object.keys(localStorage).forEach(key => {
+          if (key.startsWith('fin_')) {
+            localStorage.removeItem(key);
+          }
+        });
+      }
       setIsLoading(false);
     });
 

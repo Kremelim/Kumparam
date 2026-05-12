@@ -109,5 +109,6 @@ export interface NemaSettings {
   isEnabled: boolean;
   annualGrossRate: number;
   taxRate: number;
+  startDate?: string;
 }
 

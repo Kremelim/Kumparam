@@ -80,7 +80,25 @@ export const Projection: React.FC = () => {
     const chartPoints = [];
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    let currentSimDate = new Date(today);
+
+    let startSimDate = new Date(today);
+    items.forEach(item => {
+      if (item.isOneTime && item.oneTimeDate) {
+        const d = parseISO(item.oneTimeDate);
+        if (d < startSimDate) startSimDate = new Date(d);
+      } else if (item.createdAt) {
+         const d = parseISO(item.createdAt);
+         if (d < startSimDate) startSimDate = new Date(d);
+      }
+    });
+    startSimDate.setHours(0, 0, 0, 0);
+
+    // If starting in the past, we need to adjust projectionPeriod to make sure we still project into the future by the same amount, or just calculate the total days + diff
+    const diffTime = Math.abs(today.getTime() - startSimDate.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    const totalSimDays = projectionPeriod + diffDays;
+
+    let currentSimDate = new Date(startSimDate);
     
     const effectiveDailyRate = (annualGrossRate / 100) * (1 - (taxRate / 100)) / 365;
 
@@ -111,7 +129,7 @@ export const Projection: React.FC = () => {
        return has;
     };
 
-    for (let i = 0; i <= projectionPeriod; i++) {
+    for (let i = 0; i <= totalSimDays; i++) {
         // 1. Her gün için önceki günün bakiyesine günlük bileşik faiz (nema) uygulanır
         if (cash > 0) {
             const interest = cash * effectiveDailyRate;
