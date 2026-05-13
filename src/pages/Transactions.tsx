@@ -57,7 +57,7 @@ export const Transactions: React.FC = () => {
       setEditingTx(null);
       const today = new Date();
       let defaultDueDate = new Date(today.getFullYear(), today.getMonth(), 14);
-      if (today.getDate() > 14) {
+      if (today.getDate() > 4) {
         defaultDueDate = new Date(today.getFullYear(), today.getMonth() + 1, 14);
       }
       setFormData({
@@ -357,7 +357,19 @@ export const Transactions: React.FC = () => {
                   type="date" 
                   required
                   value={formData.date}
-                  onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                  onChange={(e) => {
+                    const newDate = e.target.value;
+                    let newDueDate = formData.dueDate;
+                    const d = new Date(newDate);
+                    if (!isNaN(d.getTime())) {
+                       let calcDueDate = new Date(d.getFullYear(), d.getMonth(), 14);
+                       if (d.getDate() > 4) {
+                          calcDueDate = new Date(d.getFullYear(), d.getMonth() + 1, 14);
+                       }
+                       newDueDate = format(calcDueDate, 'yyyy-MM-dd');
+                    }
+                    setFormData({ ...formData, date: newDate, dueDate: newDueDate });
+                  }}
                   className="w-full text-sm border border-slate-200 rounded p-2 focus:outline-none focus:border-slate-400"
                 />
               </div>

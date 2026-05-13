@@ -118,10 +118,10 @@ export const AiScanner: React.FC = () => {
         });
       }
 
-      const today = new Date();
-      let defaultDueDate = new Date(today.getFullYear(), today.getMonth(), 14);
-      if (today.getDate() > 14) {
-        defaultDueDate = new Date(today.getFullYear(), today.getMonth() + 1, 14);
+      const txDate = result.date ? new Date(result.date) : new Date();
+      let defaultDueDate = new Date(txDate.getFullYear(), txDate.getMonth(), 14);
+      if (txDate.getDate() > 4) {
+        defaultDueDate = new Date(txDate.getFullYear(), txDate.getMonth() + 1, 14);
       }
       
       const actualNote = result.items && result.items.length > 0 
@@ -179,7 +179,6 @@ export const AiScanner: React.FC = () => {
           <input 
             type="file" 
             accept="image/*" 
-            capture="environment" 
             ref={fileInputRef} 
             className="hidden" 
             onChange={handleImageCapture}
