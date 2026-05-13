@@ -1,14 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useFinance } from '../context/FinanceContext';
-import { Plus, Edit2, Trash2, X } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Budget } from '../types';
+import { format, subMonths, addMonths, startOfMonth, endOfMonth, isWithinInterval, parseISO } from 'date-fns';
+import { tr } from 'date-fns/locale';
 
 export const BudgetPage: React.FC = () => {
-  const { budgets, addBudget, updateBudget, deleteBudget } = useFinance();
+  const { budgets, transactions, addBudget, updateBudget, deleteBudget } = useFinance();
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingBudget, setEditingBudget] = useState<Budget | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [currentDate, setCurrentDate] = useState(new Date());
+  
   const [formData, setFormData] = useState({
     category: '',
     limit: ''
@@ -17,6 +21,26 @@ export const BudgetPage: React.FC = () => {
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', maximumFractionDigits: 0 }).format(amount);
   };
+
+  const handlePrevMonth = () => setCurrentDate(prev => subMonths(prev, 1));
+  const handleNextMonth = () => setCurrentDate(prev => addMonths(prev, 1));
+
+  const monthStart = startOfMonth(currentDate);
+  const monthEnd = endOfMonth(currentDate);
+
+  // Compute the budget usage for the current selected month
+  const displayBudgets = useMemo(() => {
+    return budgets.map(b => {
+      const spent = transactions
+        .filter(t => t.category === b.category && t.type === 'expense')
+        .filter(t => {
+          const tDate = parseISO(t.date);
+          return isWithinInterval(tDate, { start: monthStart, end: monthEnd });
+        })
+        .reduce((sum, t) => sum + t.amount, 0);
+      return { ...b, spent };
+    });
+  }, [budgets, transactions, monthStart, monthEnd]);
 
   const handleOpenModal = (b?: Budget) => {
     if (b) {
@@ -72,6 +96,17 @@ export const BudgetPage: React.FC = () => {
       <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
         <div className="flex items-center justify-between mb-6">
           <h3 className="font-bold text-slate-900">Kategori Bütçeleri</h3>
+          <div className="flex items-center gap-2">
+            <button onClick={handlePrevMonth} className="p-1 text-slate-400 hover:text-slate-600 border border-slate-200 rounded">
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="text-sm font-semibold text-slate-700 w-24 text-center">
+              {format(currentDate, 'MMMM yyyy', { locale: tr })}
+            </span>
+            <button onClick={handleNextMonth} className="p-1 text-slate-400 hover:text-slate-600 border border-slate-200 rounded">
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
           <button
             onClick={() => handleOpenModal()}
             className="flex items-center px-3 py-1.5 bg-slate-900 text-white rounded text-xs font-semibold hover:bg-slate-800 transition"
@@ -81,12 +116,12 @@ export const BudgetPage: React.FC = () => {
         </div>
         
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {budgets.length === 0 ? (
+          {displayBudgets.length === 0 ? (
             <div className="col-span-full text-center p-8 text-slate-500 text-sm">
               Kayıtlı bütçe bulunmamaktadır.
             </div>
           ) : (
-            budgets.map((budget) => {
+            displayBudgets.map((budget) => {
               const progress = Math.min((budget.spent / budget.limit) * 100, 100);
               const isOverBudget = budget.spent > budget.limit;
               const isNearLimit = progress > 80 && !isOverBudget;

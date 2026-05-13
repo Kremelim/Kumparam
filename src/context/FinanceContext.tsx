@@ -194,7 +194,8 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         if (billsRes.data) setBills(billsRes.data);
         if (riRes.data) setRegularIncomes(riRes.data);
         if (invRes.data) setInvestments(invRes.data);
-        if (budgetsRes.data) setStoredBudgets(budgetsRes.data);
+        if (budgetsRes.data) setStoredBudgets(budgetsRes.data.map(b => ({ ...b, limit: b.amount || b.limit })));
+
         if (projItemsRes.data) {
           setProjectionItems(projItemsRes.data.map((item: any) => ({
             id: item.id,
@@ -235,7 +236,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // Computations
   const budgets: Budget[] = storedBudgets.map(b => ({
     ...b,
-    spent: transactions.filter(t => t.category === b.category && t.type === 'expense').reduce((a, t) => a + t.amount, 0)
+    spent: 0
   }));
 
   const { liquidCash, unpaidCreditCards, unpaidCurrentStatementCC, totalNemaEarned, totalIncome, totalExpenses, currentNetWorth } = useMemo(() => {
@@ -698,7 +699,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setStoredBudgets(prev => [...prev, { ...b, id: tempId }]);
     
     if (user) {
-      const bPayload = { id: tempId, category: b.category, limit: b.limit, user_id: user.id };
+      const bPayload = { id: tempId, category: b.category, amount: b.limit, user_id: user.id };
       const { data, error } = await supabase.from('budgets').insert(bPayload).select().single();
       if (!error && data) {
         setStoredBudgets(prev => prev.map(budg => budg.id === tempId ? { ...budg, ...data } : budg));
@@ -712,7 +713,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const updateBudget = async (id: string, updatedBudget: Omit<Budget, 'id'>) => {
     setStoredBudgets(prev => prev.map(b => b.id === id ? { ...updatedBudget, id } : b));
     if (user) {
-      const bPayload = { category: updatedBudget.category, limit: updatedBudget.limit };
+      const bPayload = { category: updatedBudget.category, amount: updatedBudget.limit };
       const { error } = await supabase.from('budgets').update(bPayload).eq('id', id).eq('user_id', user.id);
       if (error) alert(`Güncelleme hatası (Budgets): ${error.message}`);
     }

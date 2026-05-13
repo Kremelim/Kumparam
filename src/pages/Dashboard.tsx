@@ -67,8 +67,8 @@ export const Dashboard: React.FC = () => {
             </div>
             <p className="text-2xl font-bold text-rose-600 mt-1">{formatCurrency(unpaidCreditCards)}</p>
           </div>
-          <div className="mt-3 flex items-center justify-between">
-            <span className="text-[10px] font-medium text-slate-500 min-w-0 pr-1 truncate">
+          <div className="mt-3 flex items-center justify-between flex-wrap gap-1">
+            <span className="text-[10px] font-medium text-slate-500">
               Bu aya ait ekstre: <span className="font-bold text-slate-700">{formatCurrency(unpaidCurrentStatementCC)}</span>
             </span>
             {unpaidCurrentStatementCC > 0 ? (
