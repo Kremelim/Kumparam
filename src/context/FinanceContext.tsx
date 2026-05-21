@@ -86,7 +86,10 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [transactions, setTransactions] = useState<Transaction[]>(() => loadFromStorage('fin_transactions', []));
   const [bills, setBills] = useState<Bill[]>(() => loadFromStorage('fin_bills', []));
   const [regularIncomes, setRegularIncomes] = useState<RegularIncome[]>(() => loadFromStorage('fin_regular_incomes', []));
-  const [investments, setInvestments] = useState<Investment[]>(() => loadFromStorage('fin_investments', []));
+  const [investments, setInvestments] = useState<Investment[]>(() => {
+    const data = loadFromStorage('fin_investments', []);
+    return data.map((inv: any) => ({ ...inv, balance: inv.balance !== undefined ? inv.balance : (inv.value || 0), totalInvested: inv.totalInvested !== undefined ? inv.totalInvested : (inv.value || 0) }));
+  });
   const [storedBudgets, setStoredBudgets] = useState<Budget[]>(() => loadFromStorage('fin_budgets', []));
   const [receipts, setReceipts] = useState<Receipt[]>(() => loadFromStorage('fin_receipts', []));
   const [customCategories, setCustomCategories] = useState<string[]>(() => loadFromStorage('fin_custom_categories', []));
@@ -170,11 +173,6 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setCustomCategories(loadFromStorage(`fin_custom_categories_${targetUserId}`, []));
       setAppTitle(loadFromStorage(`fin_app_title_${targetUserId}`, 'Kumparam'));
       setOnboardingDone(loadFromStorage(`fin_onboarding_${targetUserId}`, false));
-      setNemaSettings(loadFromStorage(`fin_nema_settings_${targetUserId}`, {
-        isEnabled: true,
-        annualGrossRate: 35.0,
-        taxRate: 17.5
-      }));
       
       try {
         const [txRes, billsRes, riRes, invRes, budgetsRes, projItemsRes, projSettingsRes] = await Promise.all([
@@ -190,7 +188,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         if (txRes.data) setTransactions(txRes.data);
         if (billsRes.data) setBills(billsRes.data);
         if (riRes.data) setRegularIncomes(riRes.data);
-        if (invRes.data) setInvestments(invRes.data);
+        if (invRes.data) setInvestments(invRes.data.map((inv: any) => ({ ...inv, balance: inv.balance !== undefined ? inv.balance : (inv.value || 0), totalInvested: inv.totalInvested !== undefined ? inv.totalInvested : (inv.value || 0) })));
         if (budgetsRes.data) setStoredBudgets(budgetsRes.data.map(b => ({ ...b, limit: b.amount || b.limit })));
 
         if (projItemsRes.data) {
@@ -783,10 +781,6 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const { error } = await supabase.from('projection_settings').upsert(dbPayload, { onConflict: 'user_id' });
       if (error) console.error("Proj Settings hata:", error);
     }
-  };
-
-  const updateNemaSettings = (settings: NemaSettings) => {
-    setNemaSettings(settings);
   };
 
   return (

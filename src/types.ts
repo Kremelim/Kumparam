@@ -62,6 +62,7 @@ export interface Investment {
   balance: number;
   totalInvested: number;
   transactions?: InvestmentTx[];
+  value?: number;
 }
 
 export interface Budget {
