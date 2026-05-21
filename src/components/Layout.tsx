@@ -7,6 +7,8 @@ import { useFinance } from '../context/FinanceContext';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { AuthModal } from './AuthModal';
+import { SettingsModal } from './SettingsModal';
+import { ProfileModal } from './ProfileModal';
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Kontrol Paneli" },
@@ -29,6 +31,8 @@ export const Layout: React.FC = () => {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -53,6 +57,7 @@ export const Layout: React.FC = () => {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setIsProfileMenuOpen(false);
+    window.location.reload();
   };
 
   const handleLoginClick = () => {
@@ -221,10 +226,16 @@ export const Layout: React.FC = () => {
                   
                   {user ? (
                     <>
-                      <button className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-emerald-600 flex items-center gap-2 transition-colors">
+                      <button 
+                        onClick={() => { setIsProfileMenuOpen(false); setShowProfileModal(true); }}
+                        className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-emerald-600 flex items-center gap-2 transition-colors"
+                      >
                         <User className="w-4 h-4" /> Profil
                       </button>
-                      <button className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-emerald-600 flex items-center gap-2 transition-colors">
+                      <button 
+                        onClick={() => { setIsProfileMenuOpen(false); setShowSettingsModal(true); }}
+                        className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-emerald-600 flex items-center gap-2 transition-colors"
+                      >
                         <Settings className="w-4 h-4" /> Ayarlar
                       </button>
                       <button onClick={handleShare} className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-emerald-600 flex items-center gap-2 transition-colors">
@@ -258,6 +269,8 @@ export const Layout: React.FC = () => {
         isOpen={isAuthModalOpen} 
         onClose={() => setIsAuthModalOpen(false)} 
       />
+      {showSettingsModal && <SettingsModal onClose={() => setShowSettingsModal(false)} />}
+      {showProfileModal && <ProfileModal onClose={() => setShowProfileModal(false)} />}
     </div>
   );
 };

@@ -1,5 +1,5 @@
 import toast from "react-hot-toast";
-import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
 import { Transaction, Bill, NetWorthEntry, Investment, Budget, Category, Recurrence, RegularIncome, SimItem, ProjectionSettings, Receipt } from '../types';
 import { addMonths, addQuarters, addYears, format, parseISO } from 'date-fns';
 import { tr } from 'date-fns/locale';
@@ -118,40 +118,30 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     projectionPeriod: 365
   }));
 
+  const stateOwner = useRef<string | undefined>(targetUserId);
+
+  useEffect(() => {
+    stateOwner.current = targetUserId;
+  }, [targetUserId]);
+
+  const saveLocal = (key: string, data: any) => {
+    if (stateOwner.current !== targetUserId) return; // Prevent saving stale state during transition
+    const prefix = user ? `${key}_${user.id}` : key;
+    localStorage.setItem(prefix, JSON.stringify(data));
+  };
+
   // Save to local as backup always
-  useEffect(() => { 
-    localStorage.setItem(user ? `fin_transactions_${user.id}` : 'fin_transactions', JSON.stringify(transactions)); 
-  }, [transactions, user]);
-  useEffect(() => { 
-    localStorage.setItem(user ? `fin_bills_${user.id}` : 'fin_bills', JSON.stringify(bills)); 
-  }, [bills, user]);
-  useEffect(() => { 
-    localStorage.setItem(user ? `fin_regular_incomes_${user.id}` : 'fin_regular_incomes', JSON.stringify(regularIncomes)); 
-  }, [regularIncomes, user]);
-  useEffect(() => { 
-    localStorage.setItem(user ? `fin_investments_${user.id}` : 'fin_investments', JSON.stringify(investments)); 
-  }, [investments, user]);
-  useEffect(() => { 
-    localStorage.setItem(user ? `fin_budgets_${user.id}` : 'fin_budgets', JSON.stringify(storedBudgets)); 
-  }, [storedBudgets, user]);
-  useEffect(() => { 
-    localStorage.setItem(user ? `fin_receipts_${user.id}` : 'fin_receipts', JSON.stringify(receipts)); 
-  }, [receipts, user]);
-  useEffect(() => { 
-    localStorage.setItem(user ? `fin_custom_categories_${user.id}` : 'fin_custom_categories', JSON.stringify(customCategories)); 
-  }, [customCategories, user]);
-  useEffect(() => { 
-    localStorage.setItem(user ? `fin_onboarding_${user.id}` : 'fin_onboarding', JSON.stringify(onboardingDone)); 
-  }, [onboardingDone, user]);
-  useEffect(() => { 
-    localStorage.setItem(user ? `fin_app_title_${user.id}` : 'fin_app_title', JSON.stringify(appTitle)); 
-  }, [appTitle, user]);
-  useEffect(() => { 
-    localStorage.setItem(user ? `fin_proj_items_${user.id}` : 'fin_proj_items', JSON.stringify(projectionItems)); 
-  }, [projectionItems, user]);
-  useEffect(() => { 
-    localStorage.setItem(user ? `fin_proj_settings_${user.id}` : 'fin_proj_settings', JSON.stringify(projectionSettings)); 
-  }, [projectionSettings, user]);
+  useEffect(() => saveLocal('fin_transactions', transactions), [transactions, user, targetUserId]);
+  useEffect(() => saveLocal('fin_bills', bills), [bills, user, targetUserId]);
+  useEffect(() => saveLocal('fin_regular_incomes', regularIncomes), [regularIncomes, user, targetUserId]);
+  useEffect(() => saveLocal('fin_investments', investments), [investments, user, targetUserId]);
+  useEffect(() => saveLocal('fin_budgets', storedBudgets), [storedBudgets, user, targetUserId]);
+  useEffect(() => saveLocal('fin_receipts', receipts), [receipts, user, targetUserId]);
+  useEffect(() => saveLocal('fin_custom_categories', customCategories), [customCategories, user, targetUserId]);
+  useEffect(() => saveLocal('fin_onboarding', onboardingDone), [onboardingDone, user, targetUserId]);
+  useEffect(() => saveLocal('fin_app_title', appTitle), [appTitle, user, targetUserId]);
+  useEffect(() => saveLocal('fin_proj_items', projectionItems), [projectionItems, user, targetUserId]);
+  useEffect(() => saveLocal('fin_proj_settings', projectionSettings), [projectionSettings, user, targetUserId]);
 
   // Load from Supabase on user init
   useEffect(() => {
