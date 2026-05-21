@@ -1,19 +1,26 @@
+import toast from "react-hot-toast";
 import React, { useState } from 'react';
 import { useFinance } from '../context/FinanceContext';
 import { format, subDays, isAfter, isWithinInterval, parseISO } from 'date-fns';
 import { tr } from 'date-fns/locale';
-import { Search, Plus, Edit2, Trash2, X } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, X, Upload } from 'lucide-react';
 import { Transaction } from '../types';
+import { getCategoryColor } from '../lib/categories';
+import { CategorySelect } from '../components/CategorySelect';
 
 export const Transactions: React.FC = () => {
   const { transactions, addTransaction, updateTransaction, deleteTransaction } = useFinance();
   const [searchTerm, setSearchTerm] = useState('');
   const [dateFilter, setDateFilter] = useState<'all' | '7days' | '30days' | 'custom'>('all');
   const [typeFilter, setTypeFilter] = useState<'all' | 'cc_unpaid' | 'cc_paid'>('all');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [sortOption, setSortOption] = useState<'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc'>('date_desc');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importText, setImportText] = useState('');
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
@@ -107,6 +114,59 @@ export const Transactions: React.FC = () => {
     handleCloseModal();
   };
 
+  const handleImportSubmit = () => {
+    // Very basic parsing for user pasting text like: "2023-10-15 150.50 Market alışverişi"
+    const lines = importText.split('\n');
+    let importedCount = 0;
+    
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      // Extract numbers for amount, e.g. 150.50 or 150,50
+      const matchAmount = line.match(/\b\d+([.,]\d+)?\b/);
+      let amount = 0;
+      if (matchAmount) {
+         amount = parseFloat(matchAmount[0].replace(',', '.'));
+      }
+      
+      // Extract basic date (YYYY-MM-DD or DD.MM.YYYY)
+      const dateMatch = line.match(/\b(\d{4}-\d{2}-\d{2})\b/) || line.match(/\b(\d{2}\.\d{2}\.\d{4})\b/);
+      let tDate = new Date();
+      if (dateMatch) {
+         if (dateMatch[0].includes('.')) {
+            const [d, m, y] = dateMatch[0].split('.');
+            tDate = new Date(`${y}-${m}-${d}`);
+         } else {
+            tDate = new Date(dateMatch[0]);
+         }
+      }
+      
+      if (amount > 0) {
+        let calcDueDate = new Date(tDate.getFullYear(), tDate.getMonth(), 14);
+        if (tDate.getDate() > 4) {
+           calcDueDate = new Date(tDate.getFullYear(), tDate.getMonth() + 1, 14);
+        }
+        
+        // Remove amount and date strings from description
+        const descMatch = line.replace(matchAmount ? matchAmount[0] : '', '').replace(dateMatch ? dateMatch[0] : '', '').trim();
+        const merchant = descMatch.substring(0, 30) || 'Otomatik Aktarım';
+
+        addTransaction({
+          type: 'expense',
+          amount: amount,
+          category: 'Diğer',
+          merchant: merchant,
+          date: format(tDate, 'yyyy-MM-dd'),
+          notes: `CC|${format(calcDueDate, 'yyyy-MM-dd')}|0|Aktarıldı`
+        });
+        importedCount++;
+      }
+    }
+    
+    toast.success(`${importedCount} işlem başarıyla aktarıldı! İşlemler 'Kredi Kartı' olarak işaretlendi ve son ödeme tarihleri 4'ü - 14'ü kuralına göre ayarlandı.`);
+    setIsImportModalOpen(false);
+    setImportText('');
+  };
+
   const handleDelete = (id: string) => {
     if (window.confirm('Bu işlemi silmek istediğinize emin misiniz?')) {
       deleteTransaction(id);
@@ -122,6 +182,7 @@ export const Transactions: React.FC = () => {
                           t.category.toLowerCase().includes(searchTerm.toLowerCase());
     
     if (!matchMerchant) return false;
+    if (categoryFilter !== 'all' && t.category !== categoryFilter) return false;
     
     const parsed = parseNotes(t.notes);
     if (typeFilter === 'cc_unpaid') {
@@ -142,7 +203,15 @@ export const Transactions: React.FC = () => {
     }
 
     return true;
-  }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }).sort((a, b) => {
+    if (sortOption === 'date_desc') return new Date(b.date).getTime() - new Date(a.date).getTime();
+    if (sortOption === 'date_asc') return new Date(a.date).getTime() - new Date(b.date).getTime();
+    if (sortOption === 'amount_desc') return b.amount - a.amount;
+    if (sortOption === 'amount_asc') return a.amount - b.amount;
+    return 0;
+  });
+
+  const uniqueCategories = Array.from(new Set(transactions.map(t => t.category))).filter(Boolean);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -150,6 +219,12 @@ export const Transactions: React.FC = () => {
         <div className="flex flex-col sm:flex-row items-center justify-between mb-4 gap-4">
           <div className="font-bold text-slate-900 w-full sm:w-auto">İşlem Geçmişi</div>
           <div className="flex flex-wrap gap-2 w-full sm:w-auto items-center">
+            <button
+              onClick={() => setIsImportModalOpen(true)}
+              className="flex items-center px-3 py-1.5 bg-indigo-600 text-white rounded text-xs font-semibold hover:bg-indigo-700 transition whitespace-nowrap"
+            >
+              <Upload className="w-3.5 h-3.5 mr-1" /> PDF/Metin Aktar
+            </button>
             <button
               onClick={() => handleOpenModal()}
               className="flex items-center px-3 py-1.5 bg-slate-900 text-white rounded text-xs font-semibold hover:bg-slate-800 transition whitespace-nowrap"
@@ -178,6 +253,17 @@ export const Transactions: React.FC = () => {
             </select>
 
             <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none bg-slate-50 font-medium text-slate-700 w-full sm:w-auto"
+            >
+              <option value="all">Tüm Kategoriler</option>
+              {uniqueCategories.map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+
+            <select
               value={dateFilter}
               onChange={(e) => setDateFilter(e.target.value as any)}
               className="text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none bg-slate-50 font-medium text-slate-700 w-full sm:w-auto"
@@ -186,6 +272,17 @@ export const Transactions: React.FC = () => {
               <option value="7days">Son 7 Gün</option>
               <option value="30days">Son 30 Gün</option>
               <option value="custom">Özel Aralık</option>
+            </select>
+
+            <select
+              value={sortOption}
+              onChange={(e) => setSortOption(e.target.value as any)}
+              className="text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none bg-slate-50 font-medium text-slate-700 w-full sm:w-auto"
+            >
+              <option value="date_desc">Tarih (Yeniye)</option>
+              <option value="date_asc">Tarih (Eskiye)</option>
+              <option value="amount_desc">Tutar (Azalan)</option>
+              <option value="amount_asc">Tutar (Artan)</option>
             </select>
           </div>
         </div>
@@ -240,7 +337,10 @@ export const Transactions: React.FC = () => {
                          </span>
                        )}
                     </p>
-                    <p className="text-[10px] text-slate-400">{tx.category} {parseNotes(tx.notes).actualNote && ` • ${parseNotes(tx.notes).actualNote}`}</p>
+                    <p className="mt-1 flex items-center gap-1">
+                      <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${getCategoryColor(tx.category)}`}>{tx.category}</span>
+                      {parseNotes(tx.notes).actualNote && <span className="text-[10px] text-slate-400 font-medium"> • {parseNotes(tx.notes).actualNote}</span>}
+                    </p>
                   </td>
                   <td className={`py-2.5 text-right font-bold ${tx.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
                     {tx.type === 'income' ? '+ ' : '- '}{formatCurrency(tx.amount)}
@@ -330,13 +430,10 @@ export const Transactions: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-bold text-slate-500 mb-1">Kategori</label>
-                <input 
-                  type="text" 
-                  required
+                <CategorySelect 
                   value={formData.category}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                  onChange={(val) => setFormData({ ...formData, category: val })}
                   className="w-full text-sm border border-slate-200 rounded p-2 focus:outline-none focus:border-slate-400"
-                  placeholder="örn: Market, Kira, Maaş"
                 />
               </div>
 
@@ -432,6 +529,43 @@ export const Transactions: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {isImportModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 flex flex-col items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50">
+              <h3 className="font-bold text-slate-900">
+                Ekstre Aktar (Kopyala/Yapıştır)
+              </h3>
+              <button onClick={() => setIsImportModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <p className="text-xs text-slate-500">
+                Bankanızın PDF e-ekstresinden kopyaladığınız veya CSV formatındaki metni aşağıya yapıştırın. Sistem tutarları, tarihleri otomatik bulup "Kredi Kartı" olarak işlem tarihine (kesim: 4'ü, ödeme: 14'ü kuralına göre) ekleyecektir.
+              </p>
+              <textarea 
+                value={importText}
+                onChange={(e) => setImportText(e.target.value)}
+                rows={10}
+                placeholder="Örnek:
+2023-11-05 Market 150.50
+12.11.2023 Tiyatro 450,00"
+                className="w-full text-xs font-mono border border-slate-200 rounded p-3 focus:outline-none focus:border-indigo-500"
+              />
+              <div className="pt-2 flex gap-3">
+                <button type="button" onClick={() => setIsImportModalOpen(false)} className="flex-1 py-2 text-xs font-bold text-slate-600 border border-slate-200 rounded hover:bg-slate-50">
+                  İptal
+                </button>
+                <button onClick={handleImportSubmit} className="flex-1 py-2 text-xs font-bold text-white bg-indigo-600 rounded hover:bg-indigo-500">
+                  Otomatik Aktar
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

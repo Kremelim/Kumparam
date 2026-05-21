@@ -4,6 +4,8 @@ import { Plus, Edit2, Trash2, X, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Budget } from '../types';
 import { format, subMonths, addMonths, startOfMonth, endOfMonth, isWithinInterval, parseISO } from 'date-fns';
 import { tr } from 'date-fns/locale';
+import { getCategoryColor } from '../lib/categories';
+import { CategorySelect } from '../components/CategorySelect';
 
 export const BudgetPage: React.FC = () => {
   const { budgets, transactions, addBudget, updateBudget, deleteBudget } = useFinance();
@@ -122,7 +124,8 @@ export const BudgetPage: React.FC = () => {
             </div>
           ) : (
             displayBudgets.map((budget) => {
-              const progress = Math.min((budget.spent / budget.limit) * 100, 100);
+              const limit = budget.limit || 1;
+              const progress = Math.min((budget.spent / limit) * 100, 100);
               const isOverBudget = budget.spent > budget.limit;
               const isNearLimit = progress > 80 && !isOverBudget;
               
@@ -132,9 +135,9 @@ export const BudgetPage: React.FC = () => {
 
               return (
                 <div key={budget.id} className="group relative border border-slate-100 rounded-lg p-3 hover:border-slate-200 transition-colors">
-                  <div className="flex justify-between text-xs mb-1.5 flex-wrap gap-2">
-                    <span className="font-semibold text-slate-900">{budget.category}</span>
-                    <span className="text-slate-500">
+                  <div className="flex justify-between items-center text-xs mb-1.5 flex-wrap gap-2">
+                    <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${getCategoryColor(budget.category)}`}>{budget.category}</span>
+                    <span className="text-slate-500 font-medium">
                       {formatCurrency(budget.spent)} / {formatCurrency(budget.limit)}
                       {isOverBudget && <span className="text-rose-600 font-bold ml-2">(Aşıldı)</span>}
                     </span>
@@ -197,13 +200,10 @@ export const BudgetPage: React.FC = () => {
             <form onSubmit={handleSave} className="p-5 space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-500 mb-1">Kategori</label>
-                <input 
-                  type="text" 
-                  required
+                <CategorySelect 
                   value={formData.category}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                  onChange={(val) => setFormData({ ...formData, category: val })}
                   className="w-full text-sm border border-slate-200 rounded p-2 focus:outline-none focus:border-slate-400"
-                  placeholder="örn: Market"
                 />
               </div>
 

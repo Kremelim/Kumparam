@@ -3,20 +3,19 @@ import { useFinance } from '../context/FinanceContext';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid } from 'recharts';
 import { format, isSameMonth, parseISO } from 'date-fns';
 import { tr } from 'date-fns/locale';
-import { NemaSettingsModal } from '../components/NemaSettingsModal';
 import { Settings2 } from 'lucide-react';
+import { getCategoryColor } from '../lib/categories';
 
 export const Dashboard: React.FC = () => {
-  const { netWorthHistory, transactions, bills, currentNetWorth, liquidCash, unpaidCreditCards, unpaidCurrentStatementCC, totalNemaEarned, payCreditCardStatement, nemaSettings } = useFinance();
+  const { netWorthHistory, transactions, bills, currentNetWorth, liquidCash, unpaidCreditCards, unpaidCurrentStatementCC, payCreditCardStatement } = useFinance();
   const [showPayConfirm, setShowPayConfirm] = useState(false);
-  const [showNemaSettings, setShowNemaSettings] = useState(false);
-  const [isMounted, setIsMounted] = useState(false);
+    const [isMounted, setIsMounted] = useState(false);
   
   useEffect(() => {
     setIsMounted(true);
   }, []);
   
-  const previousNetWorth = netWorthHistory[netWorthHistory.length - 2]?.total || 0;
+  const previousNetWorth = netWorthHistory.length > 1 ? netWorthHistory[netWorthHistory.length - 2].total : currentNetWorth;
   const netWorthChange = currentNetWorth - previousNetWorth;
   const upcomingBills = bills.filter(b => !b.isPaid && new Date(b.dueDate) >= new Date()).slice(0, 3);
   const overdueBills = bills.filter(b => !b.isPaid && new Date(b.dueDate) < new Date());
@@ -46,17 +45,6 @@ export const Dashboard: React.FC = () => {
               <span className="text-[10px] text-slate-300 font-medium bg-slate-800 px-1.5 py-0.5 rounded cursor-help" title="Bankadaki reel paranız (Kredi kartı borçları henüz düşülmedi)">Nedir?</span>
             </div>
             <p className="text-2xl font-bold mt-1 text-emerald-400">{formatCurrency(liquidCash)}</p>
-          </div>
-          <div className="mt-3 flex items-center justify-between">
-            <span className="text-[10px] font-medium text-emerald-400/80">
-              {nemaSettings.isEnabled ? `+${formatCurrency(totalNemaEarned)} TL Nema` : 'Nema hesaplaması kapalı'}
-            </span>
-            <button
-              onClick={() => setShowNemaSettings(true)}
-              className="text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-1 rounded flex items-center gap-1 transition"
-            >
-              <Settings2 className="w-3 h-3" /> Ayarlar
-            </button>
           </div>
         </div>
 
@@ -197,7 +185,10 @@ export const Dashboard: React.FC = () => {
               <div key={tx.id} className="flex justify-between items-center p-3 rounded-lg border border-slate-100 hover:border-slate-200 transition-colors">
                 <div className="flex-1 min-w-0 pr-2">
                   <p className="text-sm font-bold text-slate-900 truncate">{tx.merchant}</p>
-                  <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wide truncate">{tx.category} • {format(parseISO(tx.date), 'd MMM', { locale: tr })}</p>
+                  <p className="text-[10px] text-slate-500 font-medium truncate mt-1 flex items-center gap-1.5 flex-wrap">
+                    <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-bold ${getCategoryColor(tx.category)}`}>{tx.category}</span>
+                    <span>• {format(parseISO(tx.date), 'd MMM', { locale: tr })}</span>
+                  </p>
                 </div>
                 <p className={`text-sm font-bold shrink-0 ${tx.type === 'income' ? 'text-emerald-600' : 'text-slate-900'}`}>
                   {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount)}
@@ -239,9 +230,6 @@ export const Dashboard: React.FC = () => {
         </div>
       )}
 
-      {showNemaSettings && (
-        <NemaSettingsModal onClose={() => setShowNemaSettings(false)} />
-      )}
     </div>
   );
 };

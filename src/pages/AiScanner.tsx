@@ -4,6 +4,7 @@ import { Camera, Loader2, CheckCircle, FileText, ScanLine, AlertCircle } from 'l
 import { GoogleGenAI, Type } from "@google/genai";
 import { format } from 'date-fns';
 import { Recurrence } from '../types';
+import { getCategoryColor } from '../lib/categories';
 
 export const AiScanner: React.FC = () => {
   const { addTransaction, addBill, addReceipt } = useFinance();
@@ -242,7 +243,7 @@ export const AiScanner: React.FC = () => {
                     </div>
                     <div>
                       <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider">Kategori</label>
-                      <div className="text-xs font-semibold text-slate-900 p-2 border border-slate-100 rounded bg-slate-50">{result.category}</div>
+                      <div className={`text-xs font-semibold p-2 border border-slate-100 rounded bg-slate-50 ${getCategoryColor(result.category)}`}>{result.category}</div>
                     </div>
                   </div>
                   {result.dueDate && (

@@ -1,3 +1,4 @@
+import toast from "react-hot-toast";
 import React, { useState, useRef, useEffect } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { LayoutDashboard, Receipt, FileText, PieChart, TrendingUp, ScanLine, Wallet, Edit2, Check, LineChart, User, Settings, LogOut, LogIn, Repeat, ShoppingCart, Menu, X, Share2 } from 'lucide-react';
@@ -63,8 +64,8 @@ export const Layout: React.FC = () => {
     if (user?.id) {
       const shareUrl = `${window.location.origin}${window.location.pathname}?share=${user.id}`;
       navigator.clipboard.writeText(shareUrl)
-        .then(() => alert('Paylaşma linki panoya kopyalandı:\n' + shareUrl))
-        .catch(() => alert('Link kopyalanamadı, lütfen manuel kopyalayın: ' + shareUrl));
+        .then(() => toast.success('Paylaşma linki panoya kopyalandı'))
+        .catch(() => toast.error('Link kopyalanamadı'));
       setIsProfileMenuOpen(false);
     }
   };

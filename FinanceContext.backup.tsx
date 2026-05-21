@@ -1,6 +1,6 @@
 import toast from "react-hot-toast";
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
-import { Transaction, Bill, NetWorthEntry, Investment, Budget, Category, Recurrence, RegularIncome, SimItem, ProjectionSettings, Receipt } from '../types';
+import { Transaction, Bill, NetWorthEntry, Investment, Budget, Category, Recurrence, RegularIncome, SimItem, ProjectionSettings, NemaSettings, Receipt } from '../types';
 import { addMonths, addQuarters, addYears, format, parseISO } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { useAuth } from './AuthContext';
@@ -53,12 +53,15 @@ interface FinanceContextType {
   deleteProjectionItem: (id: string) => void;
   projectionSettings: ProjectionSettings;
   updateProjectionSettings: (settings: ProjectionSettings) => void;
+  nemaSettings: NemaSettings;
+  updateNemaSettings: (settings: NemaSettings) => void;
   totalIncome: number;
   totalExpenses: number;
   currentNetWorth: number;
   liquidCash: number;
   unpaidCreditCards: number;
   unpaidCurrentStatementCC: number;
+  totalNemaEarned: number;
   onboardingDone: boolean;
   completeOnboarding: (salary: number, rent: number, billsValue: number) => void;
   skipOnboarding: () => void;
@@ -114,6 +117,11 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     taxRate: 17.5,
     projectionPeriod: 365
   }));
+  const [nemaSettings, setNemaSettings] = useState<NemaSettings>(() => loadFromStorage('fin_nema_settings', {
+    isEnabled: true,
+    annualGrossRate: 35.0,
+    taxRate: 17.5
+  }));
 
   // Save to local as backup always
   useEffect(() => { 
@@ -149,6 +157,9 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => { 
     if (user) localStorage.setItem(`fin_proj_settings_${user.id}`, JSON.stringify(projectionSettings)); 
   }, [projectionSettings, user]);
+  useEffect(() => { 
+    if (user) localStorage.setItem(`fin_nema_settings_${user.id}`, JSON.stringify(nemaSettings)); 
+  }, [nemaSettings, user]);
 
   // Load from Supabase on user init
   useEffect(() => {
@@ -236,17 +247,55 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     spent: 0
   }));
 
-  const { liquidCash, unpaidCreditCards, unpaidCurrentStatementCC, totalIncome, totalExpenses, currentNetWorth } = useMemo(() => {
+  const { liquidCash, unpaidCreditCards, unpaidCurrentStatementCC, totalNemaEarned, totalIncome, totalExpenses, currentNetWorth } = useMemo(() => {
      const sortedTxs = [...transactions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
      const totalInc = sortedTxs.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
-     const totalExp = sortedTxs.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
-     const totalInv = investments.reduce((sum, inv) => sum + (inv.balance || 0), 0);
+     const totalInv = investments.reduce((sum, inv) => sum + inv.value, 0);
 
      if (sortedTxs.length === 0) {
-       return { liquidCash: 0, unpaidCreditCards: 0, unpaidCurrentStatementCC: 0, totalIncome: 0, totalExpenses: 0, currentNetWorth: totalInv };
+       return { liquidCash: 0, unpaidCreditCards: 0, unpaidCurrentStatementCC: 0, totalNemaEarned: 0, totalIncome: 0, totalExpenses: 0, currentNetWorth: totalInv };
      }
-
+     
+     const startDate = new Date(sortedTxs[0].date);
+     startDate.setHours(0, 0, 0, 0);
      const today = new Date();
+     today.setHours(0, 0, 0, 0);
+     
+     let totalNema = 0;
+     let currentDate = new Date(startDate);
+     const netAnnualRate = nemaSettings.annualGrossRate * (1 - nemaSettings.taxRate / 100);
+     const dailyRate = nemaSettings.isEnabled ? (netAnnualRate / 100) / 365 : 0;
+     const parsedNemaStartDate = nemaSettings.startDate ? new Date(nemaSettings.startDate) : null;
+     if (parsedNemaStartDate) parsedNemaStartDate.setHours(0, 0, 0, 0);
+
+     while (currentDate <= today) {
+       const txsUpToDate = sortedTxs.filter(t => new Date(t.date) <= currentDate);
+       const incomeUpToDate = txsUpToDate.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
+       
+       const cashExpensesUpToDate = txsUpToDate.filter(t => {
+          if (t.type !== 'expense') return false;
+          const parsed = parseNotes(t.notes);
+          if (parsed.isCC) {
+            const dueDate = new Date(parsed.dueDate);
+            dueDate.setHours(0,0,0,0);
+            return parsed.isPaid && dueDate <= currentDate;
+          }
+          return true;
+       }).reduce((sum, t) => sum + t.amount, 0);
+
+       const dailyLiquidCash = incomeUpToDate - cashExpensesUpToDate + totalNema;
+       
+       const isNemaActive = !parsedNemaStartDate || currentDate >= parsedNemaStartDate;
+       
+       if (dailyLiquidCash > 0 && isNemaActive) {
+         totalNema += (dailyLiquidCash * dailyRate);
+       }
+       
+       currentDate.setDate(currentDate.getDate() + 1);
+     }
+     
+     const totalExp = sortedTxs.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+     
      let referenceDate = new Date(today.getFullYear(), today.getMonth(), 14);
      if (today > referenceDate) {
        referenceDate = new Date(today.getFullYear(), today.getMonth() + 1, 14);
@@ -272,23 +321,24 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
           return true;
      }).reduce((sum, t) => sum + t.amount, 0);
      
-     const liqCash = totalInc - currentCashExp;
-     const netWorth = totalInc - totalExp + totalInv;
+     const liqCash = totalInc - currentCashExp + totalNema;
+     const netWorth = totalInc + totalNema - totalExp + totalInv;
 
      return { 
        liquidCash: liqCash, 
        unpaidCreditCards: unpaidCC, 
        unpaidCurrentStatementCC,
+       totalNemaEarned: totalNema,
        totalIncome: totalInc,
        totalExpenses: totalExp,
        currentNetWorth: netWorth
      };
-  }, [transactions, investments]);
+  }, [transactions, investments, projectionSettings.annualGrossRate]);
 
   const [netWorthHistory, setNetWorthHistory] = useState<NetWorthEntry[]>([]);
   
   useEffect(() => {
-    const totalInvestments = investments.reduce((sum, inv) => sum + inv.balance, 0);
+    const totalInvestments = investments.reduce((sum, inv) => sum + inv.value, 0);
     if (transactions.length === 0) {
       setNetWorthHistory([{
         id: 'nw-current',
@@ -800,8 +850,8 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       receipts, addReceipt, deleteReceipt,
       projectionItems, addProjectionItem, updateProjectionItem, deleteProjectionItem,
       projectionSettings, updateProjectionSettings,
-      
-      totalIncome, totalExpenses, currentNetWorth, liquidCash, unpaidCreditCards, unpaidCurrentStatementCC, 
+      nemaSettings, updateNemaSettings,
+      totalIncome, totalExpenses, currentNetWorth, liquidCash, unpaidCreditCards, unpaidCurrentStatementCC, totalNemaEarned,
       onboardingDone, completeOnboarding, skipOnboarding,
       appTitle, setAppTitle, isLoadingData, isSharedView,
       customCategories, addCustomCategory: (cat: string) => setCustomCategories(prev => [...prev, cat])

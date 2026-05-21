@@ -5,6 +5,8 @@ import { tr } from 'date-fns/locale';
 import { CheckCircle2, Zap, Wifi, Droplets, Home, FileText, AlertCircle, Plus, Edit2, Trash2, X } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Recurrence, Bill } from '../types';
+import { getCategoryColor } from '../lib/categories';
+import { CategorySelect } from '../components/CategorySelect';
 
 export const Bills: React.FC = () => {
   const { bills, addBill, updateBill, deleteBill, payBill, undoBillPayment } = useFinance();
@@ -173,10 +175,11 @@ export const Bills: React.FC = () => {
                   </div>
                   
                   <div className="flex-1 min-w-0 pr-2">
-                    <p className={cn("text-sm font-bold truncate", bill.isPaid ? "text-slate-500 line-through" : "text-slate-900")}>
+                    <p className={cn("text-sm font-bold truncate flex items-center gap-2", bill.isPaid ? "text-slate-500 line-through" : "text-slate-900")}>
                       {bill.name}
+                      <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-bold ${getCategoryColor(bill.category)} no-underline`}>{bill.category}</span>
                     </p>
-                    <p className="text-[10px] text-slate-400 truncate">
+                    <p className="text-[10px] text-slate-400 truncate mt-0.5">
                       Son Ödeme: {format(billDate, 'd MMM yyyy', { locale: tr })} &bull; Tekerrür: {getRecurrenceLabel(bill.recurrence)}
                     </p>
                   </div>
@@ -292,13 +295,10 @@ export const Bills: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-bold text-slate-500 mb-1">Kategori</label>
-                <input 
-                  type="text" 
-                  required
+                <CategorySelect 
                   value={formData.category}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                  onChange={(val) => setFormData({ ...formData, category: val })}
                   className="w-full text-sm border border-slate-200 rounded p-2 focus:outline-none focus:border-slate-400"
-                  placeholder="örn: Faturalar, Abonelikler"
                 />
               </div>
 

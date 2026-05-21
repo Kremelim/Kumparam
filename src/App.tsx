@@ -8,6 +8,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { FinanceProvider, useFinance } from './context/FinanceContext';
 import { AuthProvider } from './context/AuthContext';
+import { Toaster } from 'react-hot-toast';
 import { Dashboard } from './pages/Dashboard';
 import { Transactions } from './pages/Transactions';
 import { Bills } from './pages/Bills';
@@ -49,6 +50,7 @@ export default function App() {
   return (
     <AuthProvider>
       <FinanceProvider>
+        <Toaster position="top-right" />
         <AppContent />
       </FinanceProvider>
     </AuthProvider>

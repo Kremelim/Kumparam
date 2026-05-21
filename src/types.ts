@@ -1,15 +1,6 @@
 export type TransactionType = 'income' | 'expense';
 
-export type Category = 
-  | 'Maaş' 
-  | 'Market' 
-  | 'Kira' 
-  | 'Faturalar' 
-  | 'Ulaşım' 
-  | 'Sağlık' 
-  | 'Eğitim' 
-  | 'Yatırım' 
-  | 'Diğer';
+export type Category = string;
 
 export interface Transaction {
   id: string;
@@ -57,12 +48,20 @@ export interface NetWorthEntry {
   change: 'increase' | 'decrease' | 'none';
 }
 
+export interface InvestmentTx {
+  id: string;
+  type: 'deposit' | 'withdrawal' | 'gain' | 'loss';
+  amount: number;
+  date: string;
+}
+
 export interface Investment {
   id: string;
   name: string;
-  type: 'Hisse Senedi' | 'Kripto' | 'Döviz' | 'Emlak' | 'Altın' | 'Fon';
-  value: number;
-  changePercent: number; // positive or negative
+  type: 'Hisse Senedi' | 'Kripto' | 'Döviz' | 'Emlak' | 'Altın' | 'Fon' | 'Nema / PPF' | 'Diğer';
+  balance: number;
+  totalInvested: number;
+  transactions?: InvestmentTx[];
 }
 
 export interface Budget {

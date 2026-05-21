@@ -5,6 +5,8 @@ import { tr } from 'date-fns/locale';
 import { CheckCircle2, DollarSign, Wallet, TrendingUp, AlertCircle, Plus, Edit2, Trash2, X, RefreshCw } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Recurrence, RegularIncome } from '../types';
+import { getCategoryColor } from '../lib/categories';
+import { CategorySelect } from '../components/CategorySelect';
 
 export const RegularIncomes: React.FC = () => {
   const { regularIncomes, addRegularIncome, updateRegularIncome, deleteRegularIncome, processRegularIncome, undoRegularIncomeProcess } = useFinance();
@@ -164,11 +166,12 @@ export const RegularIncomes: React.FC = () => {
                     {getIcon(ri.category)}
                   </div>
                   
-                  <div className="flex-1">
-                    <p className={cn("text-sm font-bold", ri.isProcessed ? "text-slate-500 line-through" : "text-emerald-900")}>
+                  <div className="flex-1 min-w-0 pr-2">
+                    <p className={cn("text-sm font-bold truncate flex items-center gap-2", ri.isProcessed ? "text-slate-500 line-through" : "text-emerald-900")}>
                       {ri.name}
+                      <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-bold ${getCategoryColor(ri.category)} no-underline`}>{ri.category}</span>
                     </p>
-                    <p className="text-[10px] text-slate-400">
+                    <p className="text-[10px] text-slate-400 truncate mt-0.5">
                       Tarih: {format(riDate, 'd MMM yyyy', { locale: tr })} &bull; Tekerrür: {getRecurrenceLabel(ri.recurrence)}
                     </p>
                   </div>
@@ -285,15 +288,11 @@ export const RegularIncomes: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-bold text-slate-500 mb-1">Kategori</label>
-                <select 
+                <CategorySelect 
                   value={formData.category}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                  onChange={(val) => setFormData({ ...formData, category: val })}
                   className="w-full text-sm border border-slate-200 rounded p-2 focus:outline-none focus:border-slate-400"
-                >
-                  <option value="Maaş">Maaş / Ek Gelir</option>
-                  <option value="Yatırım">Yatırım (Nema/Temettü vb.)</option>
-                  <option value="Diğer">Diğer (Burs, Harçlık, Kira)</option>
-                </select>
+                />
               </div>
 
               <div>
