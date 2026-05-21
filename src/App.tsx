@@ -7,7 +7,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { FinanceProvider, useFinance } from './context/FinanceContext';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { Toaster } from 'react-hot-toast';
 import { Dashboard } from './pages/Dashboard';
 import { Transactions } from './pages/Transactions';
@@ -46,13 +46,29 @@ const AppContent = () => {
   );
 };
 
+const AppWrapper = () => {
+  const { isLoading } = useAuth();
+  
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  return (
+    <FinanceProvider>
+      <Toaster position="top-right" />
+      <AppContent />
+    </FinanceProvider>
+  );
+};
+
 export default function App() {
   return (
     <AuthProvider>
-      <FinanceProvider>
-        <Toaster position="top-right" />
-        <AppContent />
-      </FinanceProvider>
+      <AppWrapper />
     </AuthProvider>
   );
 }

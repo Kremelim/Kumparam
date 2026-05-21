@@ -120,50 +120,59 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Save to local as backup always
   useEffect(() => { 
-    if (user) localStorage.setItem(`fin_transactions_${user.id}`, JSON.stringify(transactions)); 
+    localStorage.setItem(user ? `fin_transactions_${user.id}` : 'fin_transactions', JSON.stringify(transactions)); 
   }, [transactions, user]);
   useEffect(() => { 
-    if (user) localStorage.setItem(`fin_bills_${user.id}`, JSON.stringify(bills)); 
+    localStorage.setItem(user ? `fin_bills_${user.id}` : 'fin_bills', JSON.stringify(bills)); 
   }, [bills, user]);
   useEffect(() => { 
-    if (user) localStorage.setItem(`fin_regular_incomes_${user.id}`, JSON.stringify(regularIncomes)); 
+    localStorage.setItem(user ? `fin_regular_incomes_${user.id}` : 'fin_regular_incomes', JSON.stringify(regularIncomes)); 
   }, [regularIncomes, user]);
   useEffect(() => { 
-    if (user) localStorage.setItem(`fin_investments_${user.id}`, JSON.stringify(investments)); 
+    localStorage.setItem(user ? `fin_investments_${user.id}` : 'fin_investments', JSON.stringify(investments)); 
   }, [investments, user]);
   useEffect(() => { 
-    if (user) localStorage.setItem(`fin_budgets_${user.id}`, JSON.stringify(storedBudgets)); 
+    localStorage.setItem(user ? `fin_budgets_${user.id}` : 'fin_budgets', JSON.stringify(storedBudgets)); 
   }, [storedBudgets, user]);
   useEffect(() => { 
-    if (user) localStorage.setItem(`fin_receipts_${user.id}`, JSON.stringify(receipts)); 
+    localStorage.setItem(user ? `fin_receipts_${user.id}` : 'fin_receipts', JSON.stringify(receipts)); 
   }, [receipts, user]);
   useEffect(() => { 
-    if (user) localStorage.setItem(`fin_custom_categories_${user.id}`, JSON.stringify(customCategories)); 
+    localStorage.setItem(user ? `fin_custom_categories_${user.id}` : 'fin_custom_categories', JSON.stringify(customCategories)); 
   }, [customCategories, user]);
   useEffect(() => { 
-    if (user) localStorage.setItem(`fin_onboarding_${user.id}`, JSON.stringify(onboardingDone)); 
+    localStorage.setItem(user ? `fin_onboarding_${user.id}` : 'fin_onboarding', JSON.stringify(onboardingDone)); 
   }, [onboardingDone, user]);
   useEffect(() => { 
-    if (user) localStorage.setItem(`fin_app_title_${user.id}`, JSON.stringify(appTitle)); 
+    localStorage.setItem(user ? `fin_app_title_${user.id}` : 'fin_app_title', JSON.stringify(appTitle)); 
   }, [appTitle, user]);
   useEffect(() => { 
-    if (user) localStorage.setItem(`fin_proj_items_${user.id}`, JSON.stringify(projectionItems)); 
+    localStorage.setItem(user ? `fin_proj_items_${user.id}` : 'fin_proj_items', JSON.stringify(projectionItems)); 
   }, [projectionItems, user]);
   useEffect(() => { 
-    if (user) localStorage.setItem(`fin_proj_settings_${user.id}`, JSON.stringify(projectionSettings)); 
+    localStorage.setItem(user ? `fin_proj_settings_${user.id}` : 'fin_proj_settings', JSON.stringify(projectionSettings)); 
   }, [projectionSettings, user]);
 
   // Load from Supabase on user init
   useEffect(() => {
     const fetchData = async () => {
       if (!targetUserId) {
-        setTransactions([]);
-        setBills([]);
-        setRegularIncomes([]);
-        setInvestments([]);
-        setStoredBudgets([]);
-        setProjectionItems([]);
-        setReceipts([]);
+        setTransactions(loadFromStorage('fin_transactions', []));
+        setBills(loadFromStorage('fin_bills', []));
+        setRegularIncomes(loadFromStorage('fin_regular_incomes', []));
+        setInvestments(loadFromStorage('fin_investments', []).map((inv: any) => ({ ...inv, balance: inv.balance !== undefined ? inv.balance : (inv.value || 0), totalInvested: inv.totalInvested !== undefined ? inv.totalInvested : (inv.value || 0) })));
+        setStoredBudgets(loadFromStorage('fin_budgets', []));
+        setProjectionItems(loadFromStorage('fin_proj_items', []));
+        setReceipts(loadFromStorage('fin_receipts', []));
+        setCustomCategories(loadFromStorage('fin_custom_categories', []));
+        setAppTitle(loadFromStorage('fin_app_title', 'Kumparam'));
+        setOnboardingDone(loadFromStorage('fin_onboarding', false));
+        setProjectionSettings(loadFromStorage('fin_proj_settings', {
+          annualGrossRate: 35.0,
+          taxRate: 17.5,
+          projectionPeriod: 365
+        }));
+        setIsLoadingData(false);
         return;
       }
       setIsLoadingData(true);
