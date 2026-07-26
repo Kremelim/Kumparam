@@ -68,7 +68,7 @@ interface FinanceContextType {
   addCustomCategory: (cat: string) => void;
   isLoadingData: boolean;
   isSharedView: boolean;
-  syncLocalToCloud: (overrideUserId?: string) => Promise<number>;
+  syncLocalToCloud: (overrideUserId?: string, silent?: boolean) => Promise<number>;
   recoverDataManual: () => Promise<number>;
 }
 
@@ -93,50 +93,160 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         const key = localStorage.key(i);
         if (!key) continue;
 
-        if (key.startsWith('fin_transactions')) {
+        const lowerKey = key.toLowerCase();
+
+        if (lowerKey.includes('transaction')) {
           try {
             const parsed = JSON.parse(localStorage.getItem(key) || '[]');
-            if (Array.isArray(parsed)) allTxs.push(...parsed);
+            if (Array.isArray(parsed)) {
+              parsed.forEach(item => {
+                if (item && typeof item === 'object') {
+                  const sanitizedId = isValidUUID(item.id) ? item.id : generateUUID();
+                  allTxs.push({ ...item, id: sanitizedId });
+                }
+              });
+            }
           } catch (e) {}
         }
-        if (key.startsWith('fin_bills')) {
+
+        if (lowerKey.includes('bill')) {
           try {
             const parsed = JSON.parse(localStorage.getItem(key) || '[]');
-            if (Array.isArray(parsed)) allBills.push(...parsed);
+            if (Array.isArray(parsed)) {
+              parsed.forEach(item => {
+                if (item && typeof item === 'object') {
+                  const sanitizedId = isValidUUID(item.id) ? item.id : generateUUID();
+                  allBills.push({ ...item, id: sanitizedId });
+                }
+              });
+            }
           } catch (e) {}
         }
-        if (key.startsWith('fin_regular_incomes')) {
+
+        if (lowerKey.includes('income')) {
           try {
             const parsed = JSON.parse(localStorage.getItem(key) || '[]');
-            if (Array.isArray(parsed)) allIncomes.push(...parsed);
+            if (Array.isArray(parsed)) {
+              parsed.forEach(item => {
+                if (item && typeof item === 'object') {
+                  const sanitizedId = isValidUUID(item.id) ? item.id : generateUUID();
+                  allIncomes.push({ ...item, id: sanitizedId });
+                }
+              });
+            }
           } catch (e) {}
         }
-        if (key.startsWith('fin_investments')) {
+
+        if (lowerKey.includes('investment')) {
           try {
             const parsed = JSON.parse(localStorage.getItem(key) || '[]');
-            if (Array.isArray(parsed)) allInvestments.push(...parsed);
+            if (Array.isArray(parsed)) {
+              parsed.forEach(item => {
+                if (item && typeof item === 'object') {
+                  const sanitizedId = isValidUUID(item.id) ? item.id : generateUUID();
+                  allInvestments.push({ ...item, id: sanitizedId });
+                }
+              });
+            }
           } catch (e) {}
         }
-        if (key.startsWith('fin_budgets')) {
+
+        if (lowerKey.includes('budget')) {
           try {
             const parsed = JSON.parse(localStorage.getItem(key) || '[]');
-            if (Array.isArray(parsed)) allBudgets.push(...parsed);
+            if (Array.isArray(parsed)) {
+              parsed.forEach(item => {
+                if (item && typeof item === 'object') {
+                  const sanitizedId = isValidUUID(item.id) ? item.id : generateUUID();
+                  allBudgets.push({ ...item, id: sanitizedId });
+                }
+              });
+            }
           } catch (e) {}
         }
       }
 
-      const uniqueTxs = Array.from(new Map(allTxs.filter(t => t && t.id).map(item => [item.id, item])).values());
-      const uniqueBills = Array.from(new Map(allBills.filter(b => b && b.id).map(item => [item.id, item])).values());
-      const uniqueIncomes = Array.from(new Map(allIncomes.filter(i => i && i.id).map(item => [item.id, item])).values());
-      const uniqueInvestments = Array.from(new Map(allInvestments.filter(i => i && i.id).map(item => [item.id, item])).values());
-      const uniqueBudgets = Array.from(new Map(allBudgets.filter(b => b && b.id).map(item => [item.id, item])).values());
+      const deduplicateTxs = (txs: Transaction[]): Transaction[] => {
+        const seen = new Set<string>();
+        const result: Transaction[] = [];
+        for (const t of txs) {
+          if (!t || (!t.merchant && !t.amount)) continue;
+          const contentSig = `${t.merchant || ''}-${t.amount || 0}-${t.date || ''}-${t.type || ''}`;
+          if (!seen.has(t.id) && !seen.has(contentSig)) {
+            seen.add(t.id);
+            seen.add(contentSig);
+            result.push(t);
+          }
+        }
+        return result;
+      };
+
+      const deduplicateBills = (bills: Bill[]): Bill[] => {
+        const seen = new Set<string>();
+        const result: Bill[] = [];
+        for (const b of bills) {
+          if (!b || !b.name) continue;
+          const contentSig = `${b.name || ''}-${b.amount || 0}-${b.dueDate || ''}`;
+          if (!seen.has(b.id) && !seen.has(contentSig)) {
+            seen.add(b.id);
+            seen.add(contentSig);
+            result.push(b);
+          }
+        }
+        return result;
+      };
+
+      const deduplicateIncomes = (incomes: RegularIncome[]): RegularIncome[] => {
+        const seen = new Set<string>();
+        const result: RegularIncome[] = [];
+        for (const i of incomes) {
+          if (!i || !i.source) continue;
+          const contentSig = `${i.source || ''}-${i.amount || 0}`;
+          if (!seen.has(i.id) && !seen.has(contentSig)) {
+            seen.add(i.id);
+            seen.add(contentSig);
+            result.push(i);
+          }
+        }
+        return result;
+      };
+
+      const deduplicateInvs = (invs: Investment[]): Investment[] => {
+        const seen = new Set<string>();
+        const result: Investment[] = [];
+        for (const i of invs) {
+          if (!i || !i.name) continue;
+          const contentSig = `${i.name || ''}-${i.type || ''}`;
+          if (!seen.has(i.id) && !seen.has(contentSig)) {
+            seen.add(i.id);
+            seen.add(contentSig);
+            result.push(i);
+          }
+        }
+        return result;
+      };
+
+      const deduplicateBudgets = (budgets: Budget[]): Budget[] => {
+        const seen = new Set<string>();
+        const result: Budget[] = [];
+        for (const b of budgets) {
+          if (!b || !b.category) continue;
+          const contentSig = `${b.category || ''}`;
+          if (!seen.has(b.id) && !seen.has(contentSig)) {
+            seen.add(b.id);
+            seen.add(contentSig);
+            result.push(b);
+          }
+        }
+        return result;
+      };
 
       return {
-        txs: uniqueTxs,
-        bills: uniqueBills,
-        incomes: uniqueIncomes,
-        investments: uniqueInvestments,
-        budgets: uniqueBudgets
+        txs: deduplicateTxs(allTxs),
+        bills: deduplicateBills(allBills),
+        incomes: deduplicateIncomes(allIncomes),
+        investments: deduplicateInvs(allInvestments),
+        budgets: deduplicateBudgets(allBudgets)
       };
     } catch (e) {
       console.error('Kurtarma hatası:', e);
@@ -231,14 +341,17 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => saveLocal('fin_proj_items', projectionItems), [projectionItems, user, targetUserId]);
   useEffect(() => saveLocal('fin_proj_settings', projectionSettings), [projectionSettings, user, targetUserId]);
 
-  const syncLocalToCloud = async (overrideUserId?: string) => {
+  const syncLocalToCloud = async (overrideUserId?: string, silent: boolean = false) => {
     const uid = overrideUserId || targetUserId;
     if (!uid) {
-      toast.error('Buluta aktarmak için önce giriş yapmalısınız.');
+      if (!silent) toast.error('Buluta aktarmak için önce giriş yapmalısınız.');
       return 0;
     }
 
-    const toastId = toast.loading('Yerel veriler Supabase bulut hesabınıza aktarılıyor...');
+    let toastId: string | undefined = undefined;
+    if (!silent) {
+      toastId = toast.loading('Yerel veriler Supabase bulut hesabınıza aktarılıyor...');
+    }
 
     try {
       const recovered = recoverAllLocalData();
@@ -335,16 +448,20 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         await supabase.from('projection_items').upsert(projToInsert, { onConflict: 'id' });
       }
 
-      toast.dismiss(toastId);
-      if (syncedCount > 0 || localBills.length > 0 || localInvestments.length > 0) {
-        toast.success(`Yerel verileriniz (${syncedCount} işlem) Supabase hesabınıza aktarıldı!`);
-      } else {
-        toast.success('Yerel verileriniz senkronize edildi.');
+      if (!silent) {
+        if (toastId) toast.dismiss(toastId);
+        if (syncedCount > 0 || localBills.length > 0 || localInvestments.length > 0) {
+          toast.success(`Yerel verileriniz (${syncedCount} işlem) Supabase hesabınıza aktarıldı!`);
+        } else {
+          toast.success('Yerel verileriniz senkronize edildi.');
+        }
       }
       return syncedCount;
     } catch (err: any) {
-      toast.dismiss(toastId);
-      toast.error(`Aktarım uyarısı: ${err.message || 'Bilinmeyen hata'}`);
+      if (!silent) {
+        if (toastId) toast.dismiss(toastId);
+        toast.error(`Aktarım uyarısı: ${err.message || 'Bilinmeyen hata'}`);
+      }
       return 0;
     }
   };
@@ -355,32 +472,26 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const count = recovered.txs.length + recovered.bills.length + recovered.incomes.length + recovered.investments.length;
 
     if (count > 0) {
-      setTransactions(prev => {
-        const map = new Map(prev.map(p => [p.id, p]));
-        recovered.txs.forEach(t => map.set(t.id, t));
-        return Array.from(map.values());
-      });
-      setBills(prev => {
-        const map = new Map(prev.map(p => [p.id, p]));
-        recovered.bills.forEach(b => map.set(b.id, b));
-        return Array.from(map.values());
-      });
-      setRegularIncomes(prev => {
-        const map = new Map(prev.map(p => [p.id, p]));
-        recovered.incomes.forEach(i => map.set(i.id, i));
-        return Array.from(map.values());
-      });
-      setInvestments(prev => {
-        const map = new Map(prev.map(p => [p.id, p]));
-        recovered.investments.forEach(i => map.set(i.id, i));
-        return Array.from(map.values());
-      });
+      setTransactions(recovered.txs);
+      setBills(recovered.bills);
+      setRegularIncomes(recovered.incomes);
+      setInvestments(recovered.investments.map((inv: any) => ({ ...inv, balance: inv.balance !== undefined ? inv.balance : (inv.value || 0), totalInvested: inv.totalInvested !== undefined ? inv.totalInvested : (inv.value || 0) })));
+      setStoredBudgets(recovered.budgets);
 
       if (targetUserId) {
-        await syncLocalToCloud(targetUserId);
+        try {
+          localStorage.setItem(`fin_transactions_${targetUserId}`, JSON.stringify(recovered.txs));
+          localStorage.setItem(`fin_bills_${targetUserId}`, JSON.stringify(recovered.bills));
+          localStorage.setItem(`fin_regular_incomes_${targetUserId}`, JSON.stringify(recovered.incomes));
+          localStorage.setItem(`fin_investments_${targetUserId}`, JSON.stringify(recovered.investments));
+          localStorage.setItem(`fin_budgets_${targetUserId}`, JSON.stringify(recovered.budgets));
+        } catch (e) {}
+
+        await syncLocalToCloud(targetUserId, true);
       }
+
       toast.dismiss(toastId);
-      toast.success(`${count} adet eski/yerel veri başarıyla bulundu ve hesabınıza aktarıldı!`);
+      toast.success(`${count} adet eski/yerel veri başarıyla bulundu, ekranınıza yüklendi ve hesabınıza aktarıldı!`);
     } else {
       toast.dismiss(toastId);
       toast.info('Kurtarılacak ek yerel veri bulunamadı.');
@@ -477,7 +588,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         );
 
         if (hasUnsyncedLocalData) {
-          syncLocalToCloud(targetUserId);
+          syncLocalToCloud(targetUserId, true);
         }
 
         if (projItemsRes.data) {
