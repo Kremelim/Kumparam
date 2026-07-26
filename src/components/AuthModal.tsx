@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { X, Mail, Lock, Loader2 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { X, Mail, Lock, Loader2, Settings, AlertTriangle, RefreshCw } from 'lucide-react';
+import { supabase, getConfig } from '../lib/supabase';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -14,8 +14,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [showConfig, setShowConfig] = useState(false);
+
+  const currentConfig = getConfig();
+  const initialUrl = (localStorage.getItem('custom_supabase_url') || import.meta.env.VITE_SUPABASE_URL || 'https://yoditrjvnncxiaakgtnf.supabase.co').replace('oaiqcswlhvjdcadhxijr', 'yoditrjvnncxiaakgtnf');
+  const [customUrl, setCustomUrl] = useState(initialUrl);
+  const [customKey, setCustomKey] = useState(localStorage.getItem('custom_supabase_key') || import.meta.env.VITE_SUPABASE_ANON_KEY || '');
 
   if (!isOpen) return null;
+
+  const handleSaveConfig = () => {
+    localStorage.setItem('custom_supabase_url', customUrl.trim());
+    localStorage.setItem('custom_supabase_key', customKey.trim());
+    window.location.reload();
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,6 +36,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
     setMessage(null);
 
     try {
+      const cfg = getConfig();
+      if (!cfg.isConfigured) {
+        setShowConfig(true);
+        throw new Error('Supabase URL veya Anon Key geçerli değil. Lütfen aşağıdaki Supabase bağlantı ayarlarını kontrol edin.');
+      }
+
       if (isLogin) {
         const { error } = await supabase.auth.signInWithPassword({
           email,
@@ -31,6 +49,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
         });
         if (error) throw error;
         onClose();
+        window.location.reload();
       } else {
         const { error } = await supabase.auth.signUp({
           email,
@@ -40,7 +59,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
         setMessage('Kayıt başarılı! Lütfen e-postanızı kontrol edin.');
       }
     } catch (err: any) {
-      setError(err.message || 'Bir hata oluştu.');
+      if (err.message === 'Failed to fetch' || err.name === 'TypeError' || err.message?.includes('fetch')) {
+        setError(
+          `Supabase sunucusuna bağlanılamadı ("Failed to fetch"). Target URL: ${currentConfig.url}`
+        );
+        setShowConfig(true);
+      } else {
+        setError(err.message || 'Bir hata oluştu.');
+      }
     } finally {
       setLoading(false);
     }
@@ -63,8 +89,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
 
         <div className="p-6">
           {error && (
-            <div className="bg-rose-50 text-rose-600 text-sm p-3 rounded-lg border border-rose-100 mb-4">
-              {error}
+            <div className="bg-rose-50 text-rose-700 text-sm p-3.5 rounded-xl border border-rose-200 mb-4 space-y-2">
+              <div className="flex items-start gap-2 font-medium">
+                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <span>{error}</span>
+              </div>
+              {error.includes('Failed to fetch') && (
+                <div className="text-xs text-rose-600 bg-rose-100/60 p-2.5 rounded-lg space-y-1">
+                  <p className="font-semibold text-rose-800">Olası Sebepler & Çözümler:</p>
+                  <ul className="list-disc pl-4 space-y-1">
+                    <li><b>Supabase projeniz duraklatılmış (Paused) olabilir:</b> Supabase Dashboard'a girip projenizi "Restore" (Yeniden Başlat) edin.</li>
+                    <li><b>Proje URL veya Key hatalı olabilir:</b> Aşağıdaki bağlantı ayarlarından URL'yi kontrol edin.</li>
+                    <li><b>Tarayıcı Eklentisi / Reklam Engelleyici:</b> AdBlock veya VPN `supabase.co` adresini engelliyor olabilir.</li>
+                  </ul>
+                </div>
+              )}
             </div>
           )}
           {message && (
@@ -121,7 +160,53 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
             </button>
           </form>
 
-          <div className="mt-6 text-center text-sm">
+          <div className="mt-4 pt-4 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setShowConfig(!showConfig)}
+              className="text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1 mx-auto"
+            >
+              <Settings className="w-3.5 h-3.5" />
+              Supabase Bağlantı Ayarlarını {showConfig ? 'Gizle' : 'Göster / Düzenle'}
+            </button>
+
+            {showConfig && (
+              <div className="mt-3 p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3 text-xs">
+                <div>
+                  <label className="block text-slate-600 font-medium mb-1">Supabase URL</label>
+                  <input
+                    type="text"
+                    value={customUrl}
+                    onChange={(e) => setCustomUrl(e.target.value)}
+                    placeholder="https://your-project.supabase.co"
+                    className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white font-mono text-[11px]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-600 font-medium mb-1">Supabase Anon Key</label>
+                  <input
+                    type="text"
+                    value={customKey}
+                    onChange={(e) => setCustomKey(e.target.value)}
+                    placeholder="eyJhbGciOi..."
+                    className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white font-mono text-[11px]"
+                  />
+                </div>
+                <div className="flex justify-between items-center pt-1">
+                  <span className="text-[10px] text-slate-400">Değişiklikler tarayıcıda kaydedilir</span>
+                  <button
+                    type="button"
+                    onClick={handleSaveConfig}
+                    className="bg-slate-800 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-slate-700 flex items-center gap-1"
+                  >
+                    <RefreshCw className="w-3 h-3" /> Kaydet ve Yenile
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="mt-4 text-center text-sm">
             <span className="text-slate-500">
               {isLogin ? 'Hesabınız yok mu?' : 'Zaten bir hesabınız var mı?'}
             </span>{' '}
@@ -138,3 +223,4 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
     </div>
   );
 };
+

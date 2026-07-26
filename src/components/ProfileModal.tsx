@@ -1,14 +1,20 @@
-import React from 'react';
-import { X, UserCheck, Shield, ExternalLink } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, UserCheck, Shield, ExternalLink, CloudUpload } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useFinance } from '../context/FinanceContext';
 
 export const ProfileModal = ({ onClose }: { onClose: () => void }) => {
   const { user } = useAuth();
-  const { transactions } = useFinance();
+  const { transactions, syncLocalToCloud } = useFinance();
+  const [syncing, setSyncing] = useState(false);
+
+  const handleSync = async () => {
+    setSyncing(true);
+    await syncLocalToCloud();
+    setSyncing(false);
+  };
 
   const handleManageAccount = () => {
-    // Profil yönetimi için
     alert("Profil düzenleme özelliği yakında eklenecektir.");
   };
 
@@ -21,8 +27,8 @@ export const ProfileModal = ({ onClose }: { onClose: () => void }) => {
             <X className="w-5 h-5" />
           </button>
         </div>
-        <div className="p-6">
-          <div className="flex flex-col items-center justify-center text-center space-y-3 mb-6">
+        <div className="p-6 space-y-4">
+          <div className="flex flex-col items-center justify-center text-center space-y-3">
             <div className="w-20 h-20 rounded-full bg-emerald-100 flex items-center justify-center border-4 border-emerald-50">
               <UserCheck className="w-10 h-10 text-emerald-600" />
             </div>
@@ -34,7 +40,7 @@ export const ProfileModal = ({ onClose }: { onClose: () => void }) => {
             </div>
           </div>
 
-          <div className="bg-slate-50 p-4 rounded-xl space-y-3 mb-6">
+          <div className="bg-slate-50 p-4 rounded-xl space-y-3">
             <div className="flex justify-between items-center text-sm">
               <span className="text-slate-500">Hesap Durumu</span>
               <span className="flex items-center gap-1 text-emerald-600 font-medium">
@@ -42,10 +48,19 @@ export const ProfileModal = ({ onClose }: { onClose: () => void }) => {
               </span>
             </div>
             <div className="flex justify-between items-center text-sm border-t border-slate-200/60 pt-3">
-              <span className="text-slate-500">Kayıtlı İşlem</span>
+              <span className="text-slate-500">Aktif İşlem Sayısı</span>
               <span className="font-medium text-slate-700">{transactions.length} adet</span>
             </div>
           </div>
+
+          <button 
+            onClick={handleSync}
+            disabled={syncing}
+            className="w-full bg-emerald-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-emerald-700 flex items-center justify-center gap-2 transition disabled:opacity-50 shadow-sm"
+          >
+            <CloudUpload className="w-4 h-4" />
+            {syncing ? 'Aktarılıyor...' : 'Yerel Verileri Buluta Yükle'}
+          </button>
           
           <button 
             onClick={handleManageAccount}

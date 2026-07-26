@@ -68,6 +68,7 @@ interface FinanceContextType {
   addCustomCategory: (cat: string) => void;
   isLoadingData: boolean;
   isSharedView: boolean;
+  syncLocalToCloud: (overrideUserId?: string) => Promise<number>;
 }
 
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
@@ -143,6 +144,123 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => saveLocal('fin_proj_items', projectionItems), [projectionItems, user, targetUserId]);
   useEffect(() => saveLocal('fin_proj_settings', projectionSettings), [projectionSettings, user, targetUserId]);
 
+  const syncLocalToCloud = async (overrideUserId?: string) => {
+    const uid = overrideUserId || targetUserId;
+    if (!uid) {
+      toast.error('Buluta aktarmak için önce giriş yapmalısınız.');
+      return 0;
+    }
+
+    const toastId = toast.loading('Yerel veriler Supabase bulut hesabınıza aktarılıyor...');
+
+    try {
+      const localTxs = loadFromStorage<Transaction[]>('fin_transactions', []);
+      const localBills = loadFromStorage<Bill[]>('fin_bills', []);
+      const localIncomes = loadFromStorage<RegularIncome[]>('fin_regular_incomes', []);
+      const localInvestments = loadFromStorage<Investment[]>('fin_investments', []);
+      const localBudgets = loadFromStorage<Budget[]>('fin_budgets', []);
+      const localProjItems = loadFromStorage<SimItem[]>('fin_proj_items', []);
+
+      let syncedCount = 0;
+
+      if (localTxs.length > 0) {
+        const txsToInsert = localTxs.map((t) => ({
+          id: t.id,
+          type: t.type,
+          amount: t.amount,
+          category: t.category,
+          merchant: t.merchant,
+          date: t.date,
+          notes: t.notes,
+          user_id: uid
+        }));
+        const { error } = await supabase.from('transactions').upsert(txsToInsert, { onConflict: 'id' });
+        if (!error) syncedCount += localTxs.length;
+        else console.error('Error syncing transactions:', error);
+      }
+
+      if (localBills.length > 0) {
+        const billsToInsert = localBills.map((b) => ({
+          id: b.id,
+          name: b.name,
+          amount: b.amount,
+          category: b.category,
+          dueDate: b.dueDate,
+          recurrence: b.recurrence,
+          isPaid: b.isPaid,
+          lastPaidDate: b.lastPaidDate,
+          linkedTransactionId: b.linkedTransactionId,
+          user_id: uid
+        }));
+        await supabase.from('bills').upsert(billsToInsert, { onConflict: 'id' });
+      }
+
+      if (localIncomes.length > 0) {
+        const incomesToInsert = localIncomes.map((i) => ({
+          id: i.id,
+          source: i.source,
+          amount: i.amount,
+          dayOfMonth: i.dayOfMonth,
+          user_id: uid
+        }));
+        await supabase.from('regular_incomes').upsert(incomesToInsert, { onConflict: 'id' });
+      }
+
+      if (localInvestments.length > 0) {
+        const invsToInsert = localInvestments.map((i) => ({
+          id: i.id,
+          name: i.name,
+          type: i.type,
+          amount: i.amount || 0,
+          currentRate: i.currentRate || 0,
+          balance: i.balance || 0,
+          totalInvested: i.totalInvested || 0,
+          lastInterestDate: i.lastInterestDate,
+          user_id: uid
+        }));
+        await supabase.from('investments').upsert(invsToInsert, { onConflict: 'id' });
+      }
+
+      if (localBudgets.length > 0) {
+        const budgetsToInsert = localBudgets.map((b) => ({
+          id: b.id,
+          category: b.category,
+          amount: b.limit,
+          user_id: uid
+        }));
+        await supabase.from('budgets').upsert(budgetsToInsert, { onConflict: 'id' });
+      }
+
+      if (localProjItems.length > 0) {
+        const projToInsert = localProjItems.map((p) => ({
+          id: p.id,
+          name: p.name,
+          type: p.type,
+          amount: p.amount,
+          day: p.day,
+          is_one_time: p.isOneTime,
+          one_time_date: p.oneTimeDate,
+          recurring_months: p.recurringMonths,
+          created_at: p.createdAt,
+          user_id: uid
+        }));
+        await supabase.from('projection_items').upsert(projToInsert, { onConflict: 'id' });
+      }
+
+      toast.dismiss(toastId);
+      if (syncedCount > 0 || localBills.length > 0 || localInvestments.length > 0) {
+        toast.success(`Yerel verileriniz (${syncedCount} işlem) Supabase hesabınıza aktarıldı!`);
+      } else {
+        toast.success('Aktarılacak yerel veri bulunamadı.');
+      }
+      return syncedCount;
+    } catch (err: any) {
+      toast.dismiss(toastId);
+      toast.error(`Aktarım hatası: ${err.message || 'Bilinmeyen hata'}`);
+      return 0;
+    }
+  };
+
   // Load from Supabase on user init
   useEffect(() => {
     const fetchData = async () => {
@@ -183,6 +301,38 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
           supabase.from('projection_items').select('*').eq('user_id', targetUserId),
           supabase.from('projection_settings').select('*').eq('user_id', targetUserId).maybeSingle()
         ]);
+
+        const hasCloudData = Boolean(
+          (txRes.data && txRes.data.length > 0) ||
+          (billsRes.data && billsRes.data.length > 0) ||
+          (invRes.data && invRes.data.length > 0) ||
+          (riRes.data && riRes.data.length > 0)
+        );
+
+        if (!hasCloudData) {
+          const guestTxs = loadFromStorage<Transaction[]>('fin_transactions', []);
+          const guestBills = loadFromStorage<Bill[]>('fin_bills', []);
+          const guestInvs = loadFromStorage<Investment[]>('fin_investments', []);
+
+          if (guestTxs.length > 0 || guestBills.length > 0 || guestInvs.length > 0) {
+            await syncLocalToCloud(targetUserId);
+
+            const [tx2, bills2, ri2, inv2, budgets2] = await Promise.all([
+              supabase.from('transactions').select('*').eq('user_id', targetUserId),
+              supabase.from('bills').select('*').eq('user_id', targetUserId),
+              supabase.from('regular_incomes').select('*').eq('user_id', targetUserId),
+              supabase.from('investments').select('*').eq('user_id', targetUserId),
+              supabase.from('budgets').select('*').eq('user_id', targetUserId),
+            ]);
+
+            if (tx2.data) setTransactions(tx2.data);
+            if (bills2.data) setBills(bills2.data);
+            if (ri2.data) setRegularIncomes(ri2.data);
+            if (inv2.data) setInvestments(inv2.data.map((inv: any) => ({ ...inv, balance: inv.balance !== undefined ? inv.balance : (inv.value || 0), totalInvested: inv.totalInvested !== undefined ? inv.totalInvested : (inv.value || 0) })));
+            if (budgets2.data) setStoredBudgets(budgets2.data.map(b => ({ ...b, limit: b.amount || b.limit })));
+            return;
+          }
+        }
 
         if (txRes.data) setTransactions(txRes.data);
         if (billsRes.data) setBills(billsRes.data);
@@ -796,7 +946,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       
       totalIncome, totalExpenses, currentNetWorth, liquidCash, unpaidCreditCards, unpaidCurrentStatementCC, 
       onboardingDone, completeOnboarding, skipOnboarding,
-      appTitle, setAppTitle, isLoadingData, isSharedView,
+      appTitle, setAppTitle, isLoadingData, isSharedView, syncLocalToCloud,
       customCategories, addCustomCategory: (cat: string) => setCustomCategories(prev => [...prev, cat])
     }}>
       {children}

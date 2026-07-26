@@ -20,9 +20,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    const url = import.meta.env.VITE_SUPABASE_URL;
+    const isConfigured = Boolean(url && !url.includes('placeholder'));
+
+    if (!isConfigured) {
+      setIsLoading(false);
+      return;
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
+      setIsLoading(false);
+    }).catch((err) => {
+      console.warn('Supabase getSession failed:', err);
       setIsLoading(false);
     });
 
