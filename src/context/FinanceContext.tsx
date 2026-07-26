@@ -472,22 +472,65 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const count = recovered.txs.length + recovered.bills.length + recovered.incomes.length + recovered.investments.length;
 
     if (count > 0) {
-      setTransactions(recovered.txs);
-      setBills(recovered.bills);
-      setRegularIncomes(recovered.incomes);
-      setInvestments(recovered.investments.map((inv: any) => ({ ...inv, balance: inv.balance !== undefined ? inv.balance : (inv.value || 0), totalInvested: inv.totalInvested !== undefined ? inv.totalInvested : (inv.value || 0) })));
-      setStoredBudgets(recovered.budgets);
-
       if (targetUserId) {
-        try {
-          localStorage.setItem(`fin_transactions_${targetUserId}`, JSON.stringify(recovered.txs));
-          localStorage.setItem(`fin_bills_${targetUserId}`, JSON.stringify(recovered.bills));
-          localStorage.setItem(`fin_regular_incomes_${targetUserId}`, JSON.stringify(recovered.incomes));
-          localStorage.setItem(`fin_investments_${targetUserId}`, JSON.stringify(recovered.investments));
-          localStorage.setItem(`fin_budgets_${targetUserId}`, JSON.stringify(recovered.budgets));
-        } catch (e) {}
-
+        // Senkronize et
         await syncLocalToCloud(targetUserId, true);
+        
+        // Supabase'den güncel veriyi çek ve yerelle birleştirip ekrana bas
+        try {
+          const [txRes, billsRes, riRes, invRes, budgetsRes] = await Promise.all([
+            supabase.from('transactions').select('*').eq('user_id', targetUserId),
+            supabase.from('bills').select('*').eq('user_id', targetUserId),
+            supabase.from('regular_incomes').select('*').eq('user_id', targetUserId),
+            supabase.from('investments').select('*').eq('user_id', targetUserId),
+            supabase.from('budgets').select('*').eq('user_id', targetUserId),
+          ]);
+          
+          const cloudTxs = txRes.data || [];
+          const cloudBills = billsRes.data || [];
+          const cloudIncomes = riRes.data || [];
+          const cloudInvs = invRes.data || [];
+          const cloudBudgets = budgetsRes.data || [];
+
+          const txMap = new Map<string, Transaction>();
+          recovered.txs.forEach(t => txMap.set(t.id, t));
+          cloudTxs.forEach(t => txMap.set(t.id, t));
+          
+          const billsMap = new Map<string, Bill>();
+          recovered.bills.forEach(b => billsMap.set(b.id, b));
+          cloudBills.forEach(b => billsMap.set(b.id, b));
+          
+          const incomesMap = new Map<string, RegularIncome>();
+          recovered.incomes.forEach(i => incomesMap.set(i.id, i));
+          cloudIncomes.forEach(i => incomesMap.set(i.id, i));
+          
+          const invsMap = new Map<string, Investment>();
+          recovered.investments.forEach(i => invsMap.set(i.id, i));
+          cloudInvs.forEach((inv: any) => invsMap.set(inv.id, {
+            ...inv,
+            balance: inv.balance !== undefined ? inv.balance : (inv.value || 0),
+            totalInvested: inv.totalInvested !== undefined ? inv.totalInvested : (inv.value || 0)
+          }));
+          
+          const budgetsMap = new Map<string, Budget>();
+          recovered.budgets.forEach(b => budgetsMap.set(b.id, b));
+          cloudBudgets.forEach((b: any) => budgetsMap.set(b.id, { ...b, limit: b.amount || b.limit }));
+
+          setTransactions(Array.from(txMap.values()));
+          setBills(Array.from(billsMap.values()));
+          setRegularIncomes(Array.from(incomesMap.values()));
+          setInvestments(Array.from(invsMap.values()));
+          setStoredBudgets(Array.from(budgetsMap.values()));
+
+        } catch (e) {
+          console.error("Refetch error:", e);
+        }
+      } else {
+        setTransactions(recovered.txs);
+        setBills(recovered.bills);
+        setRegularIncomes(recovered.incomes);
+        setInvestments(recovered.investments.map((inv: any) => ({ ...inv, balance: inv.balance !== undefined ? inv.balance : (inv.value || 0), totalInvested: inv.totalInvested !== undefined ? inv.totalInvested : (inv.value || 0) })));
+        setStoredBudgets(recovered.budgets);
       }
 
       toast.dismiss(toastId);
