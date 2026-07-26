@@ -89,82 +89,36 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const allInvestments: Investment[] = [];
       const allBudgets: Budget[] = [];
 
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (!key) continue;
+      const guestKeys = ['fin_transactions', 'fin_bills', 'fin_regular_incomes', 'fin_investments', 'fin_budgets'];
 
-        const lowerKey = key.toLowerCase();
-
-        if (lowerKey.includes('transaction')) {
-          try {
-            const parsed = JSON.parse(localStorage.getItem(key) || '[]');
-            if (Array.isArray(parsed)) {
-              parsed.forEach(item => {
-                if (item && typeof item === 'object') {
-                  const sanitizedId = isValidUUID(item.id) ? item.id : generateUUID();
-                  allTxs.push({ ...item, id: sanitizedId });
-                }
-              });
-            }
-          } catch (e) {}
-        }
-
-        if (lowerKey.includes('bill')) {
-          try {
-            const parsed = JSON.parse(localStorage.getItem(key) || '[]');
-            if (Array.isArray(parsed)) {
-              parsed.forEach(item => {
-                if (item && typeof item === 'object') {
-                  const sanitizedId = isValidUUID(item.id) ? item.id : generateUUID();
-                  allBills.push({ ...item, id: sanitizedId });
-                }
-              });
-            }
-          } catch (e) {}
-        }
-
-        if (lowerKey.includes('income')) {
-          try {
-            const parsed = JSON.parse(localStorage.getItem(key) || '[]');
-            if (Array.isArray(parsed)) {
-              parsed.forEach(item => {
-                if (item && typeof item === 'object') {
-                  const sanitizedId = isValidUUID(item.id) ? item.id : generateUUID();
-                  allIncomes.push({ ...item, id: sanitizedId });
-                }
-              });
-            }
-          } catch (e) {}
-        }
-
-        if (lowerKey.includes('investment')) {
-          try {
-            const parsed = JSON.parse(localStorage.getItem(key) || '[]');
-            if (Array.isArray(parsed)) {
-              parsed.forEach(item => {
-                if (item && typeof item === 'object') {
-                  const sanitizedId = isValidUUID(item.id) ? item.id : generateUUID();
-                  allInvestments.push({ ...item, id: sanitizedId });
-                }
-              });
-            }
-          } catch (e) {}
-        }
-
-        if (lowerKey.includes('budget')) {
-          try {
-            const parsed = JSON.parse(localStorage.getItem(key) || '[]');
-            if (Array.isArray(parsed)) {
-              parsed.forEach(item => {
-                if (item && typeof item === 'object') {
-                  const sanitizedId = isValidUUID(item.id) ? item.id : generateUUID();
-                  allBudgets.push({ ...item, id: sanitizedId });
-                }
-              });
-            }
-          } catch (e) {}
-        }
+      for (const key of guestKeys) {
+        try {
+          const parsed = JSON.parse(localStorage.getItem(key) || '[]');
+          if (Array.isArray(parsed)) {
+            parsed.forEach((item: any) => {
+              if (item && typeof item === 'object') {
+                const sanitizedId = isValidUUID(item.id) ? item.id : generateUUID();
+                if (key === 'fin_transactions') allTxs.push({ ...item, id: sanitizedId });
+                else if (key === 'fin_bills') allBills.push({ ...item, id: sanitizedId });
+                else if (key === 'fin_regular_incomes') allIncomes.push({ ...item, id: sanitizedId });
+                else if (key === 'fin_investments') allInvestments.push({ ...item, id: sanitizedId });
+                else if (key === 'fin_budgets') allBudgets.push({ ...item, id: sanitizedId });
+              }
+            });
+          }
+        } catch (e) {}
       }
+
+      const sanitizeDate = (d: any) => {
+        if (!d) return new Date().toISOString().split('T')[0];
+        try {
+          const parsed = new Date(d);
+          if (!isNaN(parsed.getTime())) {
+            return parsed.toISOString().split('T')[0];
+          }
+        } catch (e) {}
+        return new Date().toISOString().split('T')[0];
+      };
 
       const deduplicateTxs = (txs: any[]): Transaction[] => {
         const seen = new Set<string>();
@@ -173,12 +127,12 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
           if (!t) continue;
           
           const amount = t.amount !== undefined ? Number(t.amount) : (t.value !== undefined ? Number(t.value) : 0);
-          const merchant = t.merchant || t.name || t.title || '';
+          const merchant = t.merchant || t.name || t.title || 'Bilinmeyen';
           const category = t.category || 'Diğer';
-          const date = t.date || new Date().toISOString().split('T')[0];
+          const date = sanitizeDate(t.date);
           const type = t.type === 'income' || t.type === 'expense' ? t.type : (amount > 0 ? 'income' : 'expense');
           
-          if (!merchant && !amount) continue;
+          if (merchant === 'Bilinmeyen' && amount === 0) continue;
 
           const contentSig = `${merchant}-${amount}-${date}-${type}`;
           if (!seen.has(t.id) && !seen.has(contentSig)) {
@@ -201,8 +155,8 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         const seen = new Set<string>();
         const result: Bill[] = [];
         for (const b of bills) {
-          const name = b.name || b.title || '';
-          if (!b || !name) continue;
+          const name = b.name || b.title || 'Fatura';
+          if (!b) continue;
           const amount = b.amount !== undefined ? Number(b.amount) : (b.value !== undefined ? Number(b.value) : 0);
           const contentSig = `${name}-${amount}-${b.dueDate || ''}`;
           if (!seen.has(b.id) && !seen.has(contentSig)) {
@@ -211,7 +165,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
             result.push({
               ...b,
               name,
-              amount
+              amount: Math.abs(amount)
             });
           }
         }
@@ -222,8 +176,8 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         const seen = new Set<string>();
         const result: RegularIncome[] = [];
         for (const i of incomes) {
-          const source = i.source || i.name || i.title || '';
-          if (!i || !source) continue;
+          const source = i.source || i.name || i.title || 'Gelir';
+          if (!i) continue;
           const amount = i.amount !== undefined ? Number(i.amount) : (i.value !== undefined ? Number(i.value) : 0);
           const contentSig = `${source}-${amount}`;
           if (!seen.has(i.id) && !seen.has(contentSig)) {
@@ -232,7 +186,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
             result.push({
                ...i,
                source,
-               amount
+               amount: Math.abs(amount)
             });
           }
         }
@@ -243,8 +197,8 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         const seen = new Set<string>();
         const result: Investment[] = [];
         for (const i of invs) {
-          const name = i.name || i.title || '';
-          if (!i || !name) continue;
+          const name = i.name || i.title || 'Yatırım';
+          if (!i) continue;
           const amount = i.amount !== undefined ? Number(i.amount) : (i.value !== undefined ? Number(i.value) : 0);
           const contentSig = `${name}-${i.type || ''}`;
           if (!seen.has(i.id) && !seen.has(contentSig)) {
@@ -253,14 +207,14 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
             result.push({
               ...i,
               name,
-              amount
+              amount: Math.abs(amount)
             });
           }
         }
         return result;
       };
 
-      const deduplicateBudgets = (budgets: Budget[]): Budget[] => {
+      const deduplicateBudgets = (budgets: any[]): Budget[] => {
         const seen = new Set<string>();
         const result: Budget[] = [];
         for (const b of budgets) {
@@ -273,7 +227,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
           }
         }
         return result;
-      };
+      };;
 
       return {
         txs: deduplicateTxs(allTxs),
@@ -397,9 +351,31 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const localProjItems = getStoredData<SimItem[]>('fin_proj_items', [], uid);
 
       let syncedCount = 0;
+      let hasError = false;
+
+      const deleteGuestKeys = () => {
+        try {
+          localStorage.removeItem('fin_transactions');
+          localStorage.removeItem('fin_bills');
+          localStorage.removeItem('fin_regular_incomes');
+          localStorage.removeItem('fin_investments');
+          localStorage.removeItem('fin_budgets');
+        } catch(e) {}
+      };
+
+      const sanitizeDateStr = (d: any) => {
+        if (!d) return new Date().toISOString().split('T')[0];
+        try {
+          const parsed = new Date(d);
+          if (!isNaN(parsed.getTime())) {
+            return parsed.toISOString().split('T')[0];
+          }
+        } catch (e) {}
+        return new Date().toISOString().split('T')[0];
+      };
 
       if (localTxs.length > 0) {
-        const txsToInsert = localTxs.map((t) => {
+        const txsToInsert = localTxs.map((t: any) => {
           let dateStr = t.date;
           if (!dateStr || dateStr.trim() === '') dateStr = new Date().toISOString().split('T')[0];
           return {
@@ -407,50 +383,65 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
             type: t.type === 'income' ? 'income' : 'expense',
             amount: Number(t.amount) || 0,
             category: t.category || 'Diğer',
-            merchant: t.merchant || '',
-            date: dateStr,
+            merchant: t.merchant || 'Bilinmeyen',
+            date: sanitizeDateStr(dateStr),
             notes: t.notes || '',
             user_id: uid
           };
         });
         const { error } = await supabase.from('transactions').upsert(txsToInsert, { onConflict: 'id' });
-        if (!error) syncedCount += localTxs.length;
-        else console.error('Error syncing transactions:', error);
+        if (!error) {
+          syncedCount += localTxs.length;
+        } else {
+          hasError = true;
+          console.error('Error syncing transactions:', error);
+          if (!silent) toast.error(`İşlem Aktarım Hatası: ${error.message}`);
+        }
       }
 
       if (localBills.length > 0) {
-        const billsToInsert = localBills.map((b) => ({
+        const billsToInsert = localBills.map((b: any) => ({
           id: isValidUUID(b.id) ? b.id : generateUUID(),
           name: b.name || 'Fatura',
           amount: Number(b.amount) || 0,
           category: b.category || 'Diğer',
-          dueDate: b.dueDate || new Date().toISOString().split('T')[0],
+          dueDate: sanitizeDateStr(b.dueDate),
           recurrence: b.recurrence || 'monthly',
           isPaid: Boolean(b.isPaid),
-          lastPaidDate: b.lastPaidDate || null,
+          lastPaidDate: b.lastPaidDate ? sanitizeDateStr(b.lastPaidDate) : null,
           linkedTransactionId: b.linkedTransactionId || null,
           user_id: uid
         }));
         const { error } = await supabase.from('bills').upsert(billsToInsert, { onConflict: 'id' });
-        if (!error) syncedCount += localBills.length;
-        else console.error('Error syncing bills:', error);
+        if (!error) {
+          syncedCount += localBills.length;
+        } else {
+          hasError = true;
+          console.error('Error syncing bills:', error);
+          if (!silent) toast.error(`Fatura Aktarım Hatası: ${error.message}`);
+        }
       }
 
       if (localIncomes.length > 0) {
-        const incomesToInsert = localIncomes.map((i) => ({
+        const incomesToInsert = localIncomes.map((i: any) => ({
           id: isValidUUID(i.id) ? i.id : generateUUID(),
-          source: i.source || 'Gelir',
+          source: i.source || i.name || 'Gelir',
           amount: Number(i.amount) || 0,
-          dayOfMonth: Number(i.dayOfMonth) || 1,
+          dayOfMonth: Number(i.dayOfMonth || i.dueDate ? parseInt(i.dueDate.split('-')[2] || '1') : 1) || 1,
           user_id: uid
         }));
         const { error } = await supabase.from('regular_incomes').upsert(incomesToInsert, { onConflict: 'id' });
-        if (!error) syncedCount += localIncomes.length;
-        else console.error('Error syncing incomes:', error);
+        if (!error) {
+          syncedCount += localIncomes.length;
+        } else {
+          hasError = true;
+          console.error('Error syncing incomes:', error);
+          if (!silent) toast.error(`Gelir Aktarım Hatası: ${error.message}`);
+        }
       }
 
       if (localInvestments.length > 0) {
-        const invsToInsert = localInvestments.map((i) => ({
+        const invsToInsert = localInvestments.map((i: any) => ({
           id: isValidUUID(i.id) ? i.id : generateUUID(),
           name: i.name || 'Yatırım',
           type: i.type || 'stock',
@@ -458,40 +449,54 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
           currentRate: Number(i.currentRate) || 0,
           balance: Number(i.balance || i.value) || 0,
           totalInvested: Number(i.totalInvested || i.value) || 0,
-          lastInterestDate: i.lastInterestDate || null,
+          lastInterestDate: i.lastInterestDate ? sanitizeDateStr(i.lastInterestDate) : null,
           user_id: uid
         }));
         const { error } = await supabase.from('investments').upsert(invsToInsert, { onConflict: 'id' });
-        if (!error) syncedCount += localInvestments.length;
-        else console.error('Error syncing investments:', error);
+        if (!error) {
+          syncedCount += localInvestments.length;
+        } else {
+          hasError = true;
+          console.error('Error syncing investments:', error);
+          if (!silent) toast.error(`Yatırım Aktarım Hatası: ${error.message}`);
+        }
       }
 
       if (localBudgets.length > 0) {
-        const budgetsToInsert = localBudgets.map((b) => ({
+        const budgetsToInsert = localBudgets.map((b: any) => ({
           id: isValidUUID(b.id) ? b.id : generateUUID(),
           category: b.category || 'Diğer',
           amount: Number(b.limit || b.amount) || 0,
           user_id: uid
         }));
         const { error } = await supabase.from('budgets').upsert(budgetsToInsert, { onConflict: 'id' });
-        if (!error) syncedCount += localBudgets.length;
-        else console.error('Error syncing budgets:', error);
+        if (!error) {
+          syncedCount += localBudgets.length;
+        } else {
+          hasError = true;
+          console.error('Error syncing budgets:', error);
+          if (!silent) toast.error(`Bütçe Aktarım Hatası: ${error.message}`);
+        }
       }
 
       if (localProjItems.length > 0) {
-        const projToInsert = localProjItems.map((p) => ({
+        const projToInsert = localProjItems.map((p: any) => ({
           id: isValidUUID(p.id) ? p.id : generateUUID(),
-          name: p.name,
-          type: p.type,
+          name: p.name || 'Projeksiyon',
+          type: p.type || 'income',
           amount: Number(p.amount) || 0,
           day: Number(p.day) || 1,
           is_one_time: Boolean(p.isOneTime),
-          one_time_date: p.oneTimeDate || null,
+          one_time_date: p.oneTimeDate ? sanitizeDateStr(p.oneTimeDate) : null,
           recurring_months: Number(p.recurringMonths) || 12,
-          created_at: p.createdAt || new Date().toISOString(),
+          created_at: p.createdAt ? sanitizeDateStr(p.createdAt) : new Date().toISOString(),
           user_id: uid
         }));
         await supabase.from('projection_items').upsert(projToInsert, { onConflict: 'id' });
+      }
+
+      if (!hasError && syncedCount > 0) {
+        deleteGuestKeys();
       }
 
       if (!silent) {
@@ -583,7 +588,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       toast.success(`${count} adet eski/yerel veri başarıyla bulundu, ekranınıza yüklendi ve hesabınıza aktarıldı!`);
     } else {
       toast.dismiss(toastId);
-      toast.info('Kurtarılacak ek yerel veri bulunamadı.');
+      toast('Kurtarılacak ek yerel veri bulunamadı.');
     }
     return count;
   };
