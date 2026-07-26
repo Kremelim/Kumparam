@@ -3,10 +3,11 @@ import React, { useState } from 'react';
 import { useFinance } from '../context/FinanceContext';
 import { format, subDays, isAfter, isWithinInterval, parseISO } from 'date-fns';
 import { tr } from 'date-fns/locale';
-import { Search, Plus, Edit2, Trash2, X, Upload } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, X, Upload, Sparkles } from 'lucide-react';
 import { Transaction } from '../types';
 import { getCategoryColor } from '../lib/categories';
 import { CategorySelect } from '../components/CategorySelect';
+import { SmartImportModal } from '../components/SmartImportModal';
 
 export const Transactions: React.FC = () => {
   const { transactions, addTransaction, updateTransaction, deleteTransaction } = useFinance();
@@ -221,13 +222,13 @@ export const Transactions: React.FC = () => {
           <div className="flex flex-wrap gap-2 w-full sm:w-auto items-center">
             <button
               onClick={() => setIsImportModalOpen(true)}
-              className="flex items-center px-3 py-1.5 bg-indigo-600 text-white rounded text-xs font-semibold hover:bg-indigo-700 transition whitespace-nowrap"
+              className="flex items-center px-3.5 py-1.5 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-lg text-xs font-bold hover:from-indigo-700 hover:to-indigo-800 shadow-sm transition whitespace-nowrap"
             >
-              <Upload className="w-3.5 h-3.5 mr-1" /> PDF/Metin Aktar
+              <Sparkles className="w-3.5 h-3.5 mr-1.5 text-indigo-200" /> Akıllı Ekstre Aktar
             </button>
             <button
               onClick={() => handleOpenModal()}
-              className="flex items-center px-3 py-1.5 bg-slate-900 text-white rounded text-xs font-semibold hover:bg-slate-800 transition whitespace-nowrap"
+              className="flex items-center px-3 py-1.5 bg-slate-900 text-white rounded-lg text-xs font-semibold hover:bg-slate-800 transition whitespace-nowrap"
             >
               <Plus className="w-3.5 h-3.5 mr-1" /> Yeni
             </button>
@@ -533,42 +534,10 @@ export const Transactions: React.FC = () => {
         </div>
       )}
 
-      {isImportModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 flex flex-col items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50">
-              <h3 className="font-bold text-slate-900">
-                Ekstre Aktar (Kopyala/Yapıştır)
-              </h3>
-              <button onClick={() => setIsImportModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="p-5 space-y-4">
-              <p className="text-xs text-slate-500">
-                Bankanızın PDF e-ekstresinden kopyaladığınız veya CSV formatındaki metni aşağıya yapıştırın. Sistem tutarları, tarihleri otomatik bulup "Kredi Kartı" olarak işlem tarihine (kesim: 4'ü, ödeme: 14'ü kuralına göre) ekleyecektir.
-              </p>
-              <textarea 
-                value={importText}
-                onChange={(e) => setImportText(e.target.value)}
-                rows={10}
-                placeholder="Örnek:
-2023-11-05 Market 150.50
-12.11.2023 Tiyatro 450,00"
-                className="w-full text-xs font-mono border border-slate-200 rounded p-3 focus:outline-none focus:border-indigo-500"
-              />
-              <div className="pt-2 flex gap-3">
-                <button type="button" onClick={() => setIsImportModalOpen(false)} className="flex-1 py-2 text-xs font-bold text-slate-600 border border-slate-200 rounded hover:bg-slate-50">
-                  İptal
-                </button>
-                <button onClick={handleImportSubmit} className="flex-1 py-2 text-xs font-bold text-white bg-indigo-600 rounded hover:bg-indigo-500">
-                  Otomatik Aktar
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <SmartImportModal 
+        isOpen={isImportModalOpen} 
+        onClose={() => setIsImportModalOpen(false)} 
+      />
     </div>
   );
 };
