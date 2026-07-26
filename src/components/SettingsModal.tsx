@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
-import { X, Save, Trash2, CloudUpload } from 'lucide-react';
+import { X, Save, Trash2, CloudUpload, RefreshCw } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 
 export const SettingsModal = ({ onClose }: { onClose: () => void }) => {
-  const { appTitle, setAppTitle, syncLocalToCloud } = useFinance();
+  const { appTitle, setAppTitle, syncLocalToCloud, recoverDataManual } = useFinance();
   const { user } = useAuth();
   const [title, setTitle] = useState(appTitle);
   const [syncing, setSyncing] = useState(false);
+  const [recovering, setRecovering] = useState(false);
 
   const handleSave = () => {
     setAppTitle(title);
@@ -24,6 +25,12 @@ export const SettingsModal = ({ onClose }: { onClose: () => void }) => {
     setSyncing(true);
     await syncLocalToCloud();
     setSyncing(false);
+  };
+
+  const handleRecover = async () => {
+    setRecovering(true);
+    await recoverDataManual();
+    setRecovering(false);
   };
 
   const clearData = () => {
@@ -53,22 +60,34 @@ export const SettingsModal = ({ onClose }: { onClose: () => void }) => {
             />
           </div>
 
-          {user && (
-            <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl space-y-2">
-              <div className="text-xs text-emerald-800 font-medium">Bulut Senkronizasyonu</div>
-              <p className="text-[11px] text-emerald-600">
-                Tarayıcınızdaki tüm yerel işlemleri Supabase bulut veritabanı hesabınıza aktarın.
-              </p>
-              <button
-                onClick={handleSync}
-                disabled={syncing}
-                className="w-full bg-emerald-600 text-white text-xs font-medium py-2 rounded-lg hover:bg-emerald-700 flex items-center justify-center gap-1.5 transition disabled:opacity-50"
-              >
-                <CloudUpload className="w-3.5 h-3.5" />
-                {syncing ? 'Aktarılıyor...' : 'Yerel Verileri Buluta Yükle'}
-              </button>
+          <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-xl space-y-2">
+            <div className="text-xs text-indigo-900 font-semibold flex items-center gap-1">
+              <RefreshCw className="w-3.5 h-3.5 text-indigo-600" /> Veri Kurtarma & Senkronizasyon
             </div>
-          )}
+            <p className="text-[11px] text-indigo-700">
+              Giriş yapmadan önce girdiğiniz eski işlemleri tarayıcı hafızasından tarayıp hesabınıza aktarın.
+            </p>
+            <div className="flex flex-col gap-2 pt-1">
+              <button
+                onClick={handleRecover}
+                disabled={recovering}
+                className="w-full bg-indigo-600 text-white text-xs font-medium py-2 rounded-lg hover:bg-indigo-700 flex items-center justify-center gap-1.5 transition disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${recovering ? 'animate-spin' : ''}`} />
+                {recovering ? 'Taranıyor...' : 'Eski / Kaybolan Verileri Tara ve Kurtar'}
+              </button>
+              {user && (
+                <button
+                  onClick={handleSync}
+                  disabled={syncing}
+                  className="w-full bg-emerald-600 text-white text-xs font-medium py-2 rounded-lg hover:bg-emerald-700 flex items-center justify-center gap-1.5 transition disabled:opacity-50"
+                >
+                  <CloudUpload className="w-3.5 h-3.5" />
+                  {syncing ? 'Aktarılıyor...' : 'Yerel Verileri Buluta Yükle'}
+                </button>
+              )}
+            </div>
+          </div>
           
           <div className="pt-4 border-t border-slate-100 flex justify-between">
             <button 

@@ -69,6 +69,7 @@ interface FinanceContextType {
   isLoadingData: boolean;
   isSharedView: boolean;
   syncLocalToCloud: (overrideUserId?: string) => Promise<number>;
+  recoverDataManual: () => Promise<number>;
 }
 
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
@@ -78,6 +79,69 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const isValidUUID = (str?: string) => {
     return typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+  };
+
+  const recoverAllLocalData = () => {
+    try {
+      const allTxs: Transaction[] = [];
+      const allBills: Bill[] = [];
+      const allIncomes: RegularIncome[] = [];
+      const allInvestments: Investment[] = [];
+      const allBudgets: Budget[] = [];
+
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key) continue;
+
+        if (key.startsWith('fin_transactions')) {
+          try {
+            const parsed = JSON.parse(localStorage.getItem(key) || '[]');
+            if (Array.isArray(parsed)) allTxs.push(...parsed);
+          } catch (e) {}
+        }
+        if (key.startsWith('fin_bills')) {
+          try {
+            const parsed = JSON.parse(localStorage.getItem(key) || '[]');
+            if (Array.isArray(parsed)) allBills.push(...parsed);
+          } catch (e) {}
+        }
+        if (key.startsWith('fin_regular_incomes')) {
+          try {
+            const parsed = JSON.parse(localStorage.getItem(key) || '[]');
+            if (Array.isArray(parsed)) allIncomes.push(...parsed);
+          } catch (e) {}
+        }
+        if (key.startsWith('fin_investments')) {
+          try {
+            const parsed = JSON.parse(localStorage.getItem(key) || '[]');
+            if (Array.isArray(parsed)) allInvestments.push(...parsed);
+          } catch (e) {}
+        }
+        if (key.startsWith('fin_budgets')) {
+          try {
+            const parsed = JSON.parse(localStorage.getItem(key) || '[]');
+            if (Array.isArray(parsed)) allBudgets.push(...parsed);
+          } catch (e) {}
+        }
+      }
+
+      const uniqueTxs = Array.from(new Map(allTxs.filter(t => t && t.id).map(item => [item.id, item])).values());
+      const uniqueBills = Array.from(new Map(allBills.filter(b => b && b.id).map(item => [item.id, item])).values());
+      const uniqueIncomes = Array.from(new Map(allIncomes.filter(i => i && i.id).map(item => [item.id, item])).values());
+      const uniqueInvestments = Array.from(new Map(allInvestments.filter(i => i && i.id).map(item => [item.id, item])).values());
+      const uniqueBudgets = Array.from(new Map(allBudgets.filter(b => b && b.id).map(item => [item.id, item])).values());
+
+      return {
+        txs: uniqueTxs,
+        bills: uniqueBills,
+        incomes: uniqueIncomes,
+        investments: uniqueInvestments,
+        budgets: uniqueBudgets
+      };
+    } catch (e) {
+      console.error('Kurtarma hatası:', e);
+      return { txs: [], bills: [], incomes: [], investments: [], budgets: [] };
+    }
   };
 
   const getStoredData = <T,>(key: string, defaultValue: T, userId?: string): T => {
@@ -104,18 +168,16 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return defaultValue;
   };
 
-  const loadFromStorage = <T,>(key: string, _defaultValue: T): T => {
-    return getStoredData(key, _defaultValue, user?.id);
-  };
+  const initialRecovered = recoverAllLocalData();
 
-  const [transactions, setTransactions] = useState<Transaction[]>(() => getStoredData('fin_transactions', [], user?.id));
-  const [bills, setBills] = useState<Bill[]>(() => getStoredData('fin_bills', [], user?.id));
-  const [regularIncomes, setRegularIncomes] = useState<RegularIncome[]>(() => getStoredData('fin_regular_incomes', [], user?.id));
+  const [transactions, setTransactions] = useState<Transaction[]>(() => initialRecovered.txs.length > 0 ? initialRecovered.txs : getStoredData('fin_transactions', [], user?.id));
+  const [bills, setBills] = useState<Bill[]>(() => initialRecovered.bills.length > 0 ? initialRecovered.bills : getStoredData('fin_bills', [], user?.id));
+  const [regularIncomes, setRegularIncomes] = useState<RegularIncome[]>(() => initialRecovered.incomes.length > 0 ? initialRecovered.incomes : getStoredData('fin_regular_incomes', [], user?.id));
   const [investments, setInvestments] = useState<Investment[]>(() => {
-    const data = getStoredData('fin_investments', [], user?.id);
+    const data = initialRecovered.investments.length > 0 ? initialRecovered.investments : getStoredData('fin_investments', [], user?.id);
     return data.map((inv: any) => ({ ...inv, balance: inv.balance !== undefined ? inv.balance : (inv.value || 0), totalInvested: inv.totalInvested !== undefined ? inv.totalInvested : (inv.value || 0) }));
   });
-  const [storedBudgets, setStoredBudgets] = useState<Budget[]>(() => getStoredData('fin_budgets', [], user?.id));
+  const [storedBudgets, setStoredBudgets] = useState<Budget[]>(() => initialRecovered.budgets.length > 0 ? initialRecovered.budgets : getStoredData('fin_budgets', [], user?.id));
   const [receipts, setReceipts] = useState<Receipt[]>(() => getStoredData('fin_receipts', [], user?.id));
   const [customCategories, setCustomCategories] = useState<string[]>(() => getStoredData('fin_custom_categories', [], user?.id));
   const [onboardingDone, setOnboardingDone] = useState<boolean>(() => getStoredData('fin_onboarding', false, user?.id));
@@ -151,6 +213,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const saveLocal = (key: string, data: any) => {
     if (stateOwner.current !== targetUserId) return;
+    if (Array.isArray(data) && data.length === 0 && isLoadingData) return;
     const prefix = user ? `${key}_${user.id}` : key;
     localStorage.setItem(prefix, JSON.stringify(data));
   };
@@ -178,11 +241,12 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const toastId = toast.loading('Yerel veriler Supabase bulut hesabınıza aktarılıyor...');
 
     try {
-      const localTxs = getStoredData<Transaction[]>('fin_transactions', [], uid);
-      const localBills = getStoredData<Bill[]>('fin_bills', [], uid);
-      const localIncomes = getStoredData<RegularIncome[]>('fin_regular_incomes', [], uid);
-      const localInvestments = getStoredData<Investment[]>('fin_investments', [], uid);
-      const localBudgets = getStoredData<Budget[]>('fin_budgets', [], uid);
+      const recovered = recoverAllLocalData();
+      const localTxs = recovered.txs;
+      const localBills = recovered.bills;
+      const localIncomes = recovered.incomes;
+      const localInvestments = recovered.investments;
+      const localBudgets = recovered.budgets;
       const localProjItems = getStoredData<SimItem[]>('fin_proj_items', [], uid);
 
       let syncedCount = 0;
@@ -285,15 +349,56 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
+  const recoverDataManual = async () => {
+    const toastId = toast.loading('Tarayıcı hafızasındaki tüm eski veriler taranıyor...');
+    const recovered = recoverAllLocalData();
+    const count = recovered.txs.length + recovered.bills.length + recovered.incomes.length + recovered.investments.length;
+
+    if (count > 0) {
+      setTransactions(prev => {
+        const map = new Map(prev.map(p => [p.id, p]));
+        recovered.txs.forEach(t => map.set(t.id, t));
+        return Array.from(map.values());
+      });
+      setBills(prev => {
+        const map = new Map(prev.map(p => [p.id, p]));
+        recovered.bills.forEach(b => map.set(b.id, b));
+        return Array.from(map.values());
+      });
+      setRegularIncomes(prev => {
+        const map = new Map(prev.map(p => [p.id, p]));
+        recovered.incomes.forEach(i => map.set(i.id, i));
+        return Array.from(map.values());
+      });
+      setInvestments(prev => {
+        const map = new Map(prev.map(p => [p.id, p]));
+        recovered.investments.forEach(i => map.set(i.id, i));
+        return Array.from(map.values());
+      });
+
+      if (targetUserId) {
+        await syncLocalToCloud(targetUserId);
+      }
+      toast.dismiss(toastId);
+      toast.success(`${count} adet eski/yerel veri başarıyla bulundu ve hesabınıza aktarıldı!`);
+    } else {
+      toast.dismiss(toastId);
+      toast.info('Kurtarılacak ek yerel veri bulunamadı.');
+    }
+    return count;
+  };
+
   // Load from Supabase on user init
   useEffect(() => {
     const fetchData = async () => {
+      const recovered = recoverAllLocalData();
+
       if (!targetUserId) {
-        setTransactions(getStoredData('fin_transactions', []));
-        setBills(getStoredData('fin_bills', []));
-        setRegularIncomes(getStoredData('fin_regular_incomes', []));
-        setInvestments(getStoredData('fin_investments', []));
-        setStoredBudgets(getStoredData('fin_budgets', []));
+        setTransactions(recovered.txs);
+        setBills(recovered.bills);
+        setRegularIncomes(recovered.incomes);
+        setInvestments(recovered.investments.map((inv: any) => ({ ...inv, balance: inv.balance !== undefined ? inv.balance : (inv.value || 0), totalInvested: inv.totalInvested !== undefined ? inv.totalInvested : (inv.value || 0) })));
+        setStoredBudgets(recovered.budgets);
         setReceipts(getStoredData('fin_receipts', []));
         setCustomCategories(getStoredData('fin_custom_categories', []));
         setOnboardingDone(getStoredData('fin_onboarding', false));
@@ -303,9 +408,9 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setIsLoadingData(false);
         return;
       }
+
       setIsLoadingData(true);
       
-      // Load local-only state isolated by targetUserId
       setReceipts(getStoredData(`fin_receipts`, [], targetUserId));
       setCustomCategories(getStoredData(`fin_custom_categories`, [], targetUserId));
       setAppTitle(getStoredData(`fin_app_title`, 'Kumparam', targetUserId));
@@ -322,47 +427,58 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
           supabase.from('projection_settings').select('*').eq('user_id', targetUserId).maybeSingle()
         ]);
 
-        const hasCloudData = Boolean(
-          (txRes.data && txRes.data.length > 0) ||
-          (billsRes.data && billsRes.data.length > 0) ||
-          (invRes.data && invRes.data.length > 0) ||
-          (riRes.data && riRes.data.length > 0)
+        const cloudTxs = txRes.data || [];
+        const cloudBills = billsRes.data || [];
+        const cloudIncomes = riRes.data || [];
+        const cloudInvs = invRes.data || [];
+        const cloudBudgets = budgetsRes.data || [];
+
+        const txMap = new Map<string, Transaction>();
+        recovered.txs.forEach(t => txMap.set(t.id, t));
+        cloudTxs.forEach(t => txMap.set(t.id, t));
+        const finalTxs = Array.from(txMap.values());
+
+        const billsMap = new Map<string, Bill>();
+        recovered.bills.forEach(b => billsMap.set(b.id, b));
+        cloudBills.forEach(b => billsMap.set(b.id, b));
+        const finalBills = Array.from(billsMap.values());
+
+        const incomesMap = new Map<string, RegularIncome>();
+        recovered.incomes.forEach(i => incomesMap.set(i.id, i));
+        cloudIncomes.forEach(i => incomesMap.set(i.id, i));
+        const finalIncomes = Array.from(incomesMap.values());
+
+        const invsMap = new Map<string, Investment>();
+        recovered.investments.forEach(i => invsMap.set(i.id, i));
+        cloudInvs.forEach((inv: any) => invsMap.set(inv.id, {
+          ...inv,
+          balance: inv.balance !== undefined ? inv.balance : (inv.value || 0),
+          totalInvested: inv.totalInvested !== undefined ? inv.totalInvested : (inv.value || 0)
+        }));
+        const finalInvs = Array.from(invsMap.values());
+
+        const budgetsMap = new Map<string, Budget>();
+        recovered.budgets.forEach(b => budgetsMap.set(b.id, b));
+        cloudBudgets.forEach((b: any) => budgetsMap.set(b.id, { ...b, limit: b.amount || b.limit }));
+        const finalBudgets = Array.from(budgetsMap.values());
+
+        setTransactions(finalTxs);
+        setBills(finalBills);
+        setRegularIncomes(finalIncomes);
+        setInvestments(finalInvs);
+        setStoredBudgets(finalBudgets);
+
+        const hasUnsyncedLocalData = (
+          recovered.txs.length > cloudTxs.length ||
+          recovered.bills.length > cloudBills.length ||
+          recovered.incomes.length > cloudIncomes.length ||
+          recovered.investments.length > cloudInvs.length ||
+          (recovered.txs.length > 0 && cloudTxs.length === 0)
         );
 
-        if (!hasCloudData) {
-          const guestTxs = getStoredData<Transaction[]>('fin_transactions', [], targetUserId);
-          const guestBills = getStoredData<Bill[]>('fin_bills', [], targetUserId);
-          const guestInvs = getStoredData<Investment[]>('fin_investments', [], targetUserId);
-
-          if (guestTxs.length > 0 || guestBills.length > 0 || guestInvs.length > 0) {
-            setTransactions(guestTxs);
-            setBills(guestBills);
-            setInvestments(guestInvs);
-
-            await syncLocalToCloud(targetUserId);
-
-            const [tx2, bills2, ri2, inv2, budgets2] = await Promise.all([
-              supabase.from('transactions').select('*').eq('user_id', targetUserId),
-              supabase.from('bills').select('*').eq('user_id', targetUserId),
-              supabase.from('regular_incomes').select('*').eq('user_id', targetUserId),
-              supabase.from('investments').select('*').eq('user_id', targetUserId),
-              supabase.from('budgets').select('*').eq('user_id', targetUserId),
-            ]);
-
-            if (tx2.data && tx2.data.length > 0) setTransactions(tx2.data);
-            if (bills2.data && bills2.data.length > 0) setBills(bills2.data);
-            if (ri2.data && ri2.data.length > 0) setRegularIncomes(ri2.data);
-            if (inv2.data && inv2.data.length > 0) setInvestments(inv2.data.map((inv: any) => ({ ...inv, balance: inv.balance !== undefined ? inv.balance : (inv.value || 0), totalInvested: inv.totalInvested !== undefined ? inv.totalInvested : (inv.value || 0) })));
-            if (budgets2.data && budgets2.data.length > 0) setStoredBudgets(budgets2.data.map(b => ({ ...b, limit: b.amount || b.limit })));
-            return;
-          }
+        if (hasUnsyncedLocalData) {
+          syncLocalToCloud(targetUserId);
         }
-
-        if (txRes.data) setTransactions(txRes.data);
-        if (billsRes.data) setBills(billsRes.data);
-        if (riRes.data) setRegularIncomes(riRes.data);
-        if (invRes.data) setInvestments(invRes.data.map((inv: any) => ({ ...inv, balance: inv.balance !== undefined ? inv.balance : (inv.value || 0), totalInvested: inv.totalInvested !== undefined ? inv.totalInvested : (inv.value || 0) })));
-        if (budgetsRes.data) setStoredBudgets(budgetsRes.data.map(b => ({ ...b, limit: b.amount || b.limit })));
 
         if (projItemsRes.data) {
           setProjectionItems(projItemsRes.data.map((item: any) => ({
@@ -384,17 +500,13 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
             projectionPeriod: projSettingsRes.data.projection_period ?? 365
           });
         }
-
-        if (txRes.error) console.error("Transactions fetch error:", txRes.error);
-        if (billsRes.error) console.error("Bills fetch error:", billsRes.error);
-        if (riRes.error) console.error("Regular Incomes fetch error:", riRes.error);
-        if (invRes.error) console.error("Investments fetch error:", invRes.error);
-        if (budgetsRes.error) console.error("Budgets fetch error:", budgetsRes.error);
-        if (projItemsRes.error) console.error("Proj Items fetch error:", projItemsRes.error);
-        if (projSettingsRes.error) console.error("Proj Settings fetch error:", projSettingsRes.error);
       } catch (err) {
         console.error("Supabase veri yükleme hatası:", err);
-        setTransactions(getStoredData('fin_transactions', [], targetUserId));
+        setTransactions(recovered.txs);
+        setBills(recovered.bills);
+        setRegularIncomes(recovered.incomes);
+        setInvestments(recovered.investments);
+        setStoredBudgets(recovered.budgets);
       } finally {
         setIsLoadingData(false);
       }
@@ -971,7 +1083,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       
       totalIncome, totalExpenses, currentNetWorth, liquidCash, unpaidCreditCards, unpaidCurrentStatementCC, 
       onboardingDone, completeOnboarding, skipOnboarding,
-      appTitle, setAppTitle, isLoadingData, isSharedView, syncLocalToCloud,
+      appTitle, setAppTitle, isLoadingData, isSharedView, syncLocalToCloud, recoverDataManual,
       customCategories, addCustomCategory: (cat: string) => setCustomCategories(prev => [...prev, cat])
     }}>
       {children}
