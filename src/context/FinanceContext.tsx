@@ -166,61 +166,95 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         }
       }
 
-      const deduplicateTxs = (txs: Transaction[]): Transaction[] => {
+      const deduplicateTxs = (txs: any[]): Transaction[] => {
         const seen = new Set<string>();
         const result: Transaction[] = [];
         for (const t of txs) {
-          if (!t || (!t.merchant && !t.amount)) continue;
-          const contentSig = `${t.merchant || ''}-${t.amount || 0}-${t.date || ''}-${t.type || ''}`;
+          if (!t) continue;
+          
+          const amount = t.amount !== undefined ? Number(t.amount) : (t.value !== undefined ? Number(t.value) : 0);
+          const merchant = t.merchant || t.name || t.title || '';
+          const category = t.category || 'Diğer';
+          const date = t.date || new Date().toISOString().split('T')[0];
+          const type = t.type === 'income' || t.type === 'expense' ? t.type : (amount > 0 ? 'income' : 'expense');
+          
+          if (!merchant && !amount) continue;
+
+          const contentSig = `${merchant}-${amount}-${date}-${type}`;
           if (!seen.has(t.id) && !seen.has(contentSig)) {
             seen.add(t.id);
             seen.add(contentSig);
-            result.push(t);
+            result.push({
+              ...t,
+              amount: Math.abs(amount),
+              merchant,
+              category,
+              date,
+              type
+            });
           }
         }
         return result;
       };
 
-      const deduplicateBills = (bills: Bill[]): Bill[] => {
+      const deduplicateBills = (bills: any[]): Bill[] => {
         const seen = new Set<string>();
         const result: Bill[] = [];
         for (const b of bills) {
-          if (!b || !b.name) continue;
-          const contentSig = `${b.name || ''}-${b.amount || 0}-${b.dueDate || ''}`;
+          const name = b.name || b.title || '';
+          if (!b || !name) continue;
+          const amount = b.amount !== undefined ? Number(b.amount) : (b.value !== undefined ? Number(b.value) : 0);
+          const contentSig = `${name}-${amount}-${b.dueDate || ''}`;
           if (!seen.has(b.id) && !seen.has(contentSig)) {
             seen.add(b.id);
             seen.add(contentSig);
-            result.push(b);
+            result.push({
+              ...b,
+              name,
+              amount
+            });
           }
         }
         return result;
       };
 
-      const deduplicateIncomes = (incomes: RegularIncome[]): RegularIncome[] => {
+      const deduplicateIncomes = (incomes: any[]): RegularIncome[] => {
         const seen = new Set<string>();
         const result: RegularIncome[] = [];
         for (const i of incomes) {
-          if (!i || !i.source) continue;
-          const contentSig = `${i.source || ''}-${i.amount || 0}`;
+          const source = i.source || i.name || i.title || '';
+          if (!i || !source) continue;
+          const amount = i.amount !== undefined ? Number(i.amount) : (i.value !== undefined ? Number(i.value) : 0);
+          const contentSig = `${source}-${amount}`;
           if (!seen.has(i.id) && !seen.has(contentSig)) {
             seen.add(i.id);
             seen.add(contentSig);
-            result.push(i);
+            result.push({
+               ...i,
+               source,
+               amount
+            });
           }
         }
         return result;
       };
 
-      const deduplicateInvs = (invs: Investment[]): Investment[] => {
+      const deduplicateInvs = (invs: any[]): Investment[] => {
         const seen = new Set<string>();
         const result: Investment[] = [];
         for (const i of invs) {
-          if (!i || !i.name) continue;
-          const contentSig = `${i.name || ''}-${i.type || ''}`;
+          const name = i.name || i.title || '';
+          if (!i || !name) continue;
+          const amount = i.amount !== undefined ? Number(i.amount) : (i.value !== undefined ? Number(i.value) : 0);
+          const contentSig = `${name}-${i.type || ''}`;
           if (!seen.has(i.id) && !seen.has(contentSig)) {
             seen.add(i.id);
             seen.add(contentSig);
-            result.push(i);
+            result.push({
+              ...i,
+              name,
+              amount
+            });
           }
         }
         return result;
@@ -365,16 +399,20 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       let syncedCount = 0;
 
       if (localTxs.length > 0) {
-        const txsToInsert = localTxs.map((t) => ({
-          id: isValidUUID(t.id) ? t.id : generateUUID(),
-          type: t.type,
-          amount: Number(t.amount) || 0,
-          category: t.category || 'Diğer',
-          merchant: t.merchant || '',
-          date: t.date || new Date().toISOString().split('T')[0],
-          notes: t.notes || '',
-          user_id: uid
-        }));
+        const txsToInsert = localTxs.map((t) => {
+          let dateStr = t.date;
+          if (!dateStr || dateStr.trim() === '') dateStr = new Date().toISOString().split('T')[0];
+          return {
+            id: isValidUUID(t.id) ? t.id : generateUUID(),
+            type: t.type === 'income' ? 'income' : 'expense',
+            amount: Number(t.amount) || 0,
+            category: t.category || 'Diğer',
+            merchant: t.merchant || '',
+            date: dateStr,
+            notes: t.notes || '',
+            user_id: uid
+          };
+        });
         const { error } = await supabase.from('transactions').upsert(txsToInsert, { onConflict: 'id' });
         if (!error) syncedCount += localTxs.length;
         else console.error('Error syncing transactions:', error);
@@ -383,35 +421,39 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (localBills.length > 0) {
         const billsToInsert = localBills.map((b) => ({
           id: isValidUUID(b.id) ? b.id : generateUUID(),
-          name: b.name,
+          name: b.name || 'Fatura',
           amount: Number(b.amount) || 0,
           category: b.category || 'Diğer',
-          dueDate: b.dueDate,
+          dueDate: b.dueDate || new Date().toISOString().split('T')[0],
           recurrence: b.recurrence || 'monthly',
           isPaid: Boolean(b.isPaid),
           lastPaidDate: b.lastPaidDate || null,
           linkedTransactionId: b.linkedTransactionId || null,
           user_id: uid
         }));
-        await supabase.from('bills').upsert(billsToInsert, { onConflict: 'id' });
+        const { error } = await supabase.from('bills').upsert(billsToInsert, { onConflict: 'id' });
+        if (!error) syncedCount += localBills.length;
+        else console.error('Error syncing bills:', error);
       }
 
       if (localIncomes.length > 0) {
         const incomesToInsert = localIncomes.map((i) => ({
           id: isValidUUID(i.id) ? i.id : generateUUID(),
-          source: i.source,
+          source: i.source || 'Gelir',
           amount: Number(i.amount) || 0,
           dayOfMonth: Number(i.dayOfMonth) || 1,
           user_id: uid
         }));
-        await supabase.from('regular_incomes').upsert(incomesToInsert, { onConflict: 'id' });
+        const { error } = await supabase.from('regular_incomes').upsert(incomesToInsert, { onConflict: 'id' });
+        if (!error) syncedCount += localIncomes.length;
+        else console.error('Error syncing incomes:', error);
       }
 
       if (localInvestments.length > 0) {
         const invsToInsert = localInvestments.map((i) => ({
           id: isValidUUID(i.id) ? i.id : generateUUID(),
-          name: i.name,
-          type: i.type,
+          name: i.name || 'Yatırım',
+          type: i.type || 'stock',
           amount: Number(i.amount) || 0,
           currentRate: Number(i.currentRate) || 0,
           balance: Number(i.balance || i.value) || 0,
@@ -419,17 +461,21 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
           lastInterestDate: i.lastInterestDate || null,
           user_id: uid
         }));
-        await supabase.from('investments').upsert(invsToInsert, { onConflict: 'id' });
+        const { error } = await supabase.from('investments').upsert(invsToInsert, { onConflict: 'id' });
+        if (!error) syncedCount += localInvestments.length;
+        else console.error('Error syncing investments:', error);
       }
 
       if (localBudgets.length > 0) {
         const budgetsToInsert = localBudgets.map((b) => ({
           id: isValidUUID(b.id) ? b.id : generateUUID(),
-          category: b.category,
+          category: b.category || 'Diğer',
           amount: Number(b.limit || b.amount) || 0,
           user_id: uid
         }));
-        await supabase.from('budgets').upsert(budgetsToInsert, { onConflict: 'id' });
+        const { error } = await supabase.from('budgets').upsert(budgetsToInsert, { onConflict: 'id' });
+        if (!error) syncedCount += localBudgets.length;
+        else console.error('Error syncing budgets:', error);
       }
 
       if (localProjItems.length > 0) {
