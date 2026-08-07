@@ -8,20 +8,9 @@ const getSupabaseConfig = () => {
   const localUrl = typeof localStorage !== 'undefined' ? localStorage.getItem('custom_supabase_url') || '' : '';
   const localKey = typeof localStorage !== 'undefined' ? localStorage.getItem('custom_supabase_key') || '' : '';
 
-  let url = (localUrl || envUrl).trim();
-  const key = (localKey || envKey).trim();
-
-  // If previous broken URL is stored, auto-correct to active project URL
-  if (url.includes('oaiqcswlhvjdcadhxijr')) {
-    url = 'https://yoditrjvnncxiaakgtnf.supabase.co';
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('custom_supabase_url', url);
-    }
-  }
-
-  if (!url) {
-    url = 'https://yoditrjvnncxiaakgtnf.supabase.co';
-  }
+  // Prioritize environment variables from AI Studio settings, then local storage fallback
+  let url = (envUrl || localUrl).trim();
+  const key = (envKey || localKey).trim();
 
   if (url && !url.startsWith('http://') && !url.startsWith('https://')) {
     url = `https://${url}`;
